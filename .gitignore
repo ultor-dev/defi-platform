@@ -1,0 +1,25 @@
+# Секреты - НИКОГДА не заливать
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Node / Hardhat
+node_modules/
+contracts/artifacts/
+contracts/cache/
+
+# Docker volumes
+postgres_data/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
