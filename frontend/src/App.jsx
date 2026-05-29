@@ -4,6 +4,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import KYC from './pages/KYC';
 import Chat from './pages/Chat';
+import Admin from './pages/Admin';
 import Navbar from './components/Navbar';
 
 function PrivateRoute({ children }) {
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
         <Route path="/kyc" element={<PrivateRoute><KYC /></PrivateRoute>} />
         <Route path="/chat" element={<PrivateRoute><Chat /></PrivateRoute>} />
+        <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
       </Routes>
     </BrowserRouter>
   );
