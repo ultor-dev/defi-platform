@@ -4,7 +4,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
 
 from app.core.database import get_db
-from app.core.security import require_moderator, require_admin, get_current_user
+from app.core.security import require_admin, require_admin, get_current_user
 from app.models.user import User, UserRole, KYCStatus
 from app.schemas.user import KYCReviewRequest, UserOut
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 @router.get("/stats")
 async def get_stats(
-    moderator: User = Depends(require_moderator),
+    moderator: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Общая статистика платформы."""
@@ -32,7 +32,7 @@ async def get_stats(
 
 @router.get("/users", response_model=list[UserOut])
 async def get_all_users(
-    moderator: User = Depends(require_moderator),
+    moderator: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -43,7 +43,7 @@ async def get_all_users(
 
 @router.get("/kyc/pending", response_model=list[UserOut])
 async def get_pending_kyc(
-    moderator: User = Depends(require_moderator),
+    moderator: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -58,7 +58,7 @@ async def get_pending_kyc(
 @router.post("/kyc/approve/{user_id}", response_model=UserOut)
 async def approve_kyc(
     user_id: int,
-    moderator: User = Depends(require_moderator),
+    moderator: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     from app.services.blockchain_service import mint_tokens
@@ -93,7 +93,7 @@ async def approve_kyc(
 async def reject_kyc(
     user_id: int,
     reason: str = "Documents not valid",
-    moderator: User = Depends(require_moderator),
+    moderator: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     from datetime import datetime, timezone
@@ -151,3 +151,62 @@ async def toggle_active(
     user.is_active = not user.is_active
     await db.commit()
     return {"id": user.id, "username": user.username, "is_active": user.is_active}
+
+
+@router.get("/network/graph")
+async def get_network_graph(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Граф кошельков и транзакций — доступен всем авторизованным."""
+    from app.models.message import Conversation, ConversationParticipant
+    from sqlalchemy import text
+
+    # Все пользователи с кошельками
+    result = await db.execute(
+        select(User).options(joinedload(User.wallet)).where(User.wallet != None)
+    )
+    users = result.scalars().all()
+
+    nodes = []
+    for u in users:
+        if u.wallet:
+            nodes.append({
+                "id": u.wallet.address,
+                "username": u.username,
+                "role": u.role,
+                "kyc_status": u.kyc_status,
+                "address": u.wallet.address,
+            })
+
+    # Связи через разговоры (кто с кем общался)
+    conv_result = await db.execute(
+        select(ConversationParticipant)
+    )
+    participants = conv_result.scalars().all()
+
+    conv_map = {}
+    for p in participants:
+        if p.conversation_id not in conv_map:
+            conv_map[p.conversation_id] = []
+        conv_map[p.conversation_id].append(p.user_id)
+
+    # Карта user_id → wallet address
+    user_wallet = {u.id: u.wallet.address for u in users if u.wallet}
+
+    links = []
+    seen = set()
+    for conv_id, user_ids in conv_map.items():
+        if len(user_ids) == 2:
+            a, b = user_ids[0], user_ids[1]
+            if a in user_wallet and b in user_wallet:
+                key = tuple(sorted([a, b]))
+                if key not in seen:
+                    seen.add(key)
+                    links.append({
+                        "source": user_wallet[a],
+                        "target": user_wallet[b],
+                        "type": "chat",
+                    })
+
+    return {"nodes": nodes, "links": links}

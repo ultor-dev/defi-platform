@@ -19,8 +19,6 @@ export default function Navbar() {
     navigate('/login');
   };
 
-  const isMod = ['MODERATOR','ADMIN'].includes(role);
-
   return (
     <nav style={styles.nav}>
       <Link to="/" style={styles.brand}>⬡ DeFi Platform</Link>
@@ -30,10 +28,9 @@ export default function Navbar() {
             <Link to="/" style={styles.link}>Dashboard</Link>
             <Link to="/kyc" style={styles.link}>KYC</Link>
             <Link to="/chat" style={styles.link}>Chat</Link>
-            {isMod && (
-              <Link to="/admin" style={styles.adminLink}>
-                {role === 'ADMIN' ? '👑 Admin' : '🛡️ Moderator'}
-              </Link>
+            <Link to="/graph" style={styles.link}>Network</Link>
+            {role === 'ADMIN' && (
+              <Link to="/admin" style={styles.adminLink}>👑 Admin</Link>
             )}
             <button onClick={logout} style={styles.btn}>Logout</button>
           </>

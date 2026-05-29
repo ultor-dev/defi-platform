@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.core.database import get_db
-from app.core.security import get_current_user, require_moderator
+from app.core.security import get_current_user, require_admin
 from app.models.user import User, UserRole, KYCStatus
 from app.schemas.user import KYCSubmitRequest, KYCReviewRequest, UserOut
 from app.services.blockchain_service import mint_tokens
@@ -43,7 +43,7 @@ async def submit_kyc(
 @router.post("/review", response_model=UserOut)
 async def review_kyc(
     body: KYCReviewRequest,
-    reviewer: User = Depends(require_moderator),
+    reviewer: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -82,7 +82,7 @@ async def review_kyc(
 
 @router.get("/pending", response_model=list[UserOut])
 async def pending_kyc(
-    moderator: User = Depends(require_moderator),
+    moderator: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(

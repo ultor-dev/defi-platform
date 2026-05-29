@@ -13,7 +13,6 @@ from app.core.database import Base
 class UserRole(str, enum.Enum):
     UNVERIFIED = "UNVERIFIED"
     USER = "USER"
-    MODERATOR = "MODERATOR"
     ADMIN = "ADMIN"
 
 

@@ -82,6 +82,5 @@ def require_role(*roles: UserRole):
     return guard
 
 
-require_verified = require_role(UserRole.USER, UserRole.MODERATOR, UserRole.ADMIN)
-require_moderator = require_role(UserRole.MODERATOR, UserRole.ADMIN)
+require_verified = require_role(UserRole.USER, UserRole.ADMIN)
 require_admin = require_role(UserRole.ADMIN)
