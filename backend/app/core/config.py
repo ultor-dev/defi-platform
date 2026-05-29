@@ -29,10 +29,9 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 
-
-settings = Settings()
-
     # Email
     RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "noreply@example.com"
+    EMAIL_FROM: str = "nurzhigitzhobonov24@gmail.com"
     FRONTEND_URL: str = "http://localhost:5173"
+
+settings = Settings()
