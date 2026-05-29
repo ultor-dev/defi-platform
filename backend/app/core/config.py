@@ -31,3 +31,8 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+    # Email
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM: str = "noreply@example.com"
+    FRONTEND_URL: str = "http://localhost:5173"
