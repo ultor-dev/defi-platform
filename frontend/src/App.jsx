@@ -6,6 +6,9 @@ import KYC from './pages/KYC';
 import Chat from './pages/Chat';
 import Admin from './pages/Admin';
 import Graph from './pages/Graph';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
 import Navbar from './components/Navbar';
 
 function PrivateRoute({ children }) {
@@ -19,6 +22,9 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
         <Route path="/kyc" element={<PrivateRoute><KYC /></PrivateRoute>} />
         <Route path="/chat" element={<PrivateRoute><Chat /></PrivateRoute>} />

@@ -32,15 +32,18 @@ export default function Login() {
           {error && <p style={styles.error}>{error}</p>}
           <button style={styles.btn} type="submit">Login</button>
         </form>
-        <p style={styles.foot}>No account? <Link to="/register">Register</Link></p>
+        <div style={styles.links}>
+          <Link to="/forgot-password" style={styles.forgotLink}>Forgot password?</Link>
+          <span style={styles.sep}>·</span>
+          <Link to="/register" style={styles.forgotLink}>Register</Link>
+        </div>
       </div>
     </div>
   );
 }
 
 const styles = {
-  wrap: { minHeight:'90vh', display:'flex', alignItems:'center', justifyContent:'center',
-    background:'#0f172a' },
+  wrap: { minHeight:'90vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0f172a' },
   card: { background:'#1e293b', padding:40, borderRadius:12, width:360 },
   title: { color:'#f1f5f9', marginBottom:24, textAlign:'center' },
   input: { width:'100%', padding:'10px 12px', marginBottom:12, borderRadius:6,
@@ -49,5 +52,7 @@ const styles = {
   btn: { width:'100%', padding:12, background:'#38bdf8', color:'#0f172a',
     border:'none', borderRadius:6, fontWeight:700, cursor:'pointer', fontSize:15 },
   error: { color:'#ef4444', fontSize:13, marginBottom:8 },
-  foot: { color:'#94a3b8', textAlign:'center', marginTop:16, fontSize:13 },
+  links: { display:'flex', justifyContent:'center', gap:8, marginTop:16, alignItems:'center' },
+  forgotLink: { color:'#38bdf8', fontSize:13, textDecoration:'none' },
+  sep: { color:'#334155' },
 };

@@ -30,6 +30,7 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     username = Column(String(64), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
+    email_verified = Column(Boolean, default=False)
 
     role = Column(SAEnum(UserRole, name="userrole", create_type=False), default=UserRole.UNVERIFIED, nullable=False)
     is_active = Column(Boolean, default=True)
