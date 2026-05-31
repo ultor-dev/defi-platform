@@ -10,6 +10,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
 import Navbar from './components/Navbar';
+import Profile from './pages/Profile';
 
 function PrivateRoute({ children }) {
   return localStorage.getItem('access_token') ? children : <Navigate to="/login" />;
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/chat" element={<PrivateRoute><Chat /></PrivateRoute>} />
         <Route path="/admin" element={<PrivateRoute><Admin /></PrivateRoute>} />
         <Route path="/graph" element={<PrivateRoute><Graph /></PrivateRoute>} />
+	<Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
       </Routes>
     </BrowserRouter>
   );

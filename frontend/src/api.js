@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: 'http://localhost:8000/api/v1',
 });
 
 api.interceptors.request.use((config) => {
@@ -13,6 +13,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (r) => r,
   async (error) => {
+    const detail = error.response?.data?.detail;
+    if (detail && Array.isArray(detail)) {
+      error.response.data.detail = detail.map(d =>
+        d.loc ? `${d.loc[d.loc.length-1]}: ${d.msg}` : d.msg
+      ).join(', ');
+    }
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('refresh_token');

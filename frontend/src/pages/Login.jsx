@@ -16,7 +16,12 @@ export default function Login() {
       localStorage.setItem('refresh_token', res.data.refresh_token);
       navigate('/');
     } catch (e) {
-      setError(e.response?.data?.detail || 'Login failed');
+      const detail = e.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setError(detail.map(d => d.msg).join(', '));
+      } else {
+        setError(detail || 'Login failed');
+      }
     }
   };
 

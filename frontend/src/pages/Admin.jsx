@@ -1,320 +1,308 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../api';
 
-const TABS = ['Overview', 'KYC Queue', 'All Users'];
+const TABS = ["Overview", "KYC Queue", "All Users"];
+
+const DOC_LABEL = {
+  passport: "Паспорт",
+  id_card: "ID-карта",
+  drivers_license: "Водит. удост.",
+};
+
+const ROLE_COLOR = {
+  ADMIN: "#7c3aed",
+  USER: "#0284c7",
+  UNVERIFIED: "#475569",
+};
 
 export default function Admin() {
-  const [user, setUser] = useState(null);
-  const [tab, setTab] = useState('Overview');
+  const [tab, setTab] = useState("Overview");
   const [stats, setStats] = useState(null);
-  const [pending, setPending] = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
+  const [kycQueue, setKycQueue] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState('');
-  const navigate = useNavigate();
+  const [actionMsg, setActionMsg] = useState("");
+  const [rejectModal, setRejectModal] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
 
-  useEffect(() => {
-    api.get('/auth/me').then(r => {
-      setUser(r.data);
-      if (!['MODERATOR','ADMIN'].includes(r.data.role)) navigate('/');
-    });
+  const flash = (msg) => {
+    setActionMsg(msg);
+    setTimeout(() => setActionMsg(""), 3000);
+  };
+
+  const loadStats = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/admin/stats");
+      setStats(res.data);
+    } catch {
+      flash("Ошибка загрузки статистики");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadKycQueue = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/admin/kyc/pending");
+      setKycQueue(res.data);
+    } catch {
+      flash("Ошибка загрузки KYC очереди");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/admin/users");
+      setUsers(res.data);
+    } catch {
+      flash("Ошибка загрузки пользователей");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (tab === 'Overview') loadStats();
-    if (tab === 'KYC Queue') loadPending();
-    if (tab === 'All Users') loadUsers();
-  }, [tab]);
+    if (tab === "Overview") loadStats();
+    if (tab === "KYC Queue") loadKycQueue();
+    if (tab === "All Users") loadUsers();
+  }, [tab, loadStats, loadKycQueue, loadUsers]);
 
-  const loadStats = async () => {
-    const r = await api.get('/admin/stats');
-    setStats(r.data);
-  };
-
-  const loadPending = async () => {
-    setLoading(true);
-    const r = await api.get('/admin/kyc/pending');
-    setPending(r.data);
-    setLoading(false);
-  };
-
-  const loadUsers = async () => {
-    setLoading(true);
-    const r = await api.get('/admin/users');
-    setAllUsers(r.data);
-    setLoading(false);
-  };
-
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
-  };
-
-  const approve = async (userId) => {
+  const approveKyc = async (kycId) => {
     try {
-      await api.post(`/admin/kyc/approve/${userId}`);
-      showToast('✅ KYC approved — 100 tokens minted');
-      loadPending();
-      loadStats();
+      await api.post(`/admin/kyc/approve/${kycId}`);
+      flash("✅ KYC одобрен");
+      loadKycQueue();
     } catch (e) {
-      showToast('❌ ' + (e.response?.data?.detail || 'Error'));
+      flash(e.response?.data?.detail || "Ошибка при одобрении");
     }
   };
 
-  const reject = async (userId) => {
-    const reason = prompt('Rejection reason:') || 'Documents not valid';
+  const rejectKyc = async () => {
+    if (!rejectReason.trim()) return;
     try {
-      await api.post(`/admin/kyc/reject/${userId}?reason=${encodeURIComponent(reason)}`);
-      showToast('KYC rejected');
-      loadPending();
-      loadStats();
+      await api.post(`/admin/kyc/reject/${rejectModal.kycId}?reason=${encodeURIComponent(rejectReason)}`);
+      flash("❌ KYC отклонён");
+      setRejectModal(null);
+      setRejectReason("");
+      loadKycQueue();
     } catch (e) {
-      showToast('❌ ' + (e.response?.data?.detail || 'Error'));
+      flash(e.response?.data?.detail || "Ошибка при отклонении");
     }
   };
 
-  const toggleActive = async (userId) => {
+  const toggleBan = async (userId, isActive) => {
     try {
-      const r = await api.patch(`/admin/users/${userId}/toggle-active`);
-      showToast(r.data.is_active ? '✅ User activated' : '🔒 User deactivated');
+      await api.patch(`/admin/users/${userId}?is_active=${!isActive}`);
+      flash(isActive ? "Заблокирован" : "Разблокирован");
       loadUsers();
     } catch (e) {
-      showToast('❌ ' + (e.response?.data?.detail || 'Error'));
+      flash(e.response?.data?.detail || "Ошибка");
     }
   };
 
-  const changeRole = async (userId, role) => {
-    try {
-      await api.patch(`/admin/users/${userId}/role?role=${role}`);
-      showToast('✅ Role updated');
-      loadUsers();
-    } catch (e) {
-      showToast('❌ ' + (e.response?.data?.detail || 'Error'));
-    }
+  const getPrimaryWallet = (user) => {
+    if (!user.wallets || user.wallets.length === 0) return null;
+    return user.wallets.find(w => w.is_primary) || user.wallets[0];
   };
 
   return (
-    <div style={s.wrap}>
-      {toast && <div style={s.toast}>{toast}</div>}
+    <div style={styles.container}>
+      <h1 style={styles.title}>Admin Panel</h1>
+      {actionMsg && <div style={styles.toast}>{actionMsg}</div>}
 
-      <div style={s.sidebar}>
-        <div style={s.sidebarTitle}>
-          {user?.role === 'ADMIN' ? '👑 Admin Panel' : '🛡️ Moderator Panel'}
-        </div>
-        {TABS.map(t => (
-          <div key={t} style={{...s.tabItem, background: tab===t ? '#1e40af' : 'transparent'}}
-            onClick={() => setTab(t)}>
-            {t === 'Overview' && '📊 '}
-            {t === 'KYC Queue' && '📋 '}
-            {t === 'All Users' && '👥 '}
-            {t}
-            {t === 'KYC Queue' && pending.length > 0 && tab !== 'KYC Queue' && (
-              <span style={s.badge}>{pending.length}</span>
-            )}
-          </div>
+      {/* Tabs */}
+      <div style={styles.tabs}>
+        {TABS.map((t) => (
+          <button key={t}
+            style={{ ...styles.tab, ...(tab === t ? styles.tabActive : {}) }}
+            onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
 
-      <div style={s.content}>
+      {loading && <p style={styles.hint}>Загрузка...</p>}
 
-        {/* Overview */}
-        {tab === 'Overview' && stats && (
-          <div>
-            <h2 style={s.pageTitle}>Platform Overview</h2>
-            <div style={s.statsGrid}>
-              <StatCard label="Total Users" value={stats.total_users} color="#38bdf8" icon="👥" />
-              <StatCard label="KYC Pending" value={stats.kyc_pending} color="#fbbf24" icon="⏳" />
-              <StatCard label="KYC Verified" value={stats.kyc_verified} color="#4ade80" icon="✅" />
-              <StatCard label="Unverified" value={stats.kyc_unverified} color="#94a3b8" icon="🔓" />
+      {/* Overview */}
+      {tab === "Overview" && stats && (
+        <div style={styles.grid}>
+          {[
+            { label: "Всего пользователей", value: stats.total_users ?? "—", color: "#3b82f6" },
+            { label: "Активных", value: stats.active_users ?? "—", color: "#10b981" },
+            { label: "Заблокированных", value: stats.banned_users ?? "—", color: "#ef4444" },
+            { label: "Верифицированных", value: stats.verified_users ?? "—", color: "#8b5cf6" },
+            { label: "Pending KYC", value: stats.pending_kyc ?? "—", color: "#f59e0b" },
+            { label: "Approved KYC", value: stats.approved_kyc ?? "—", color: "#10b981" },
+          ].map((s) => (
+            <div key={s.label} style={styles.statCard}>
+              <div style={{ ...styles.statValue, color: s.color }}>{s.value}</div>
+              <div style={styles.statLabel}>{s.label}</div>
             </div>
-            {stats.kyc_pending > 0 && (
-              <div style={s.alert} onClick={() => setTab('KYC Queue')}>
-                ⚠️ {stats.kyc_pending} KYC application{stats.kyc_pending > 1 ? 's' : ''} waiting for review →
-              </div>
-            )}
-          </div>
-        )}
+          ))}
+        </div>
+      )}
 
-        {/* KYC Queue */}
-        {tab === 'KYC Queue' && (
-          <div>
-            <h2 style={s.pageTitle}>KYC Review Queue</h2>
-            {loading && <p style={s.muted}>Loading...</p>}
-            {!loading && pending.length === 0 && (
-              <div style={s.empty}>
-                <div style={{fontSize:48}}>🎉</div>
-                <p>No pending KYC applications</p>
-              </div>
-            )}
-            {pending.map(u => (
-              <div key={u.id} style={s.kycCard}>
-                <div style={s.kycLeft}>
-                  <div style={s.kycAvatar}>{u.username[0].toUpperCase()}</div>
-                  <div>
-                    <div style={s.kycName}>{u.username}</div>
-                    <div style={s.kycEmail}>{u.email}</div>
-                    <div style={s.kycMeta}>
-                      📄 {u.kyc_document_type} · {u.kyc_document_number}
+      {/* KYC Queue */}
+      {tab === "KYC Queue" && !loading && (
+        <>
+          {kycQueue.length === 0 ? (
+            <p style={styles.hint}>Нет заявок на рассмотрении</p>
+          ) : (
+            <div style={styles.cardList}>
+              {kycQueue.map((app) => (
+                <div key={app.id} style={styles.kycCard}>
+                  <div style={styles.kycMeta}>
+                    <div>
+                      <span style={styles.kycName}>{app.full_name}</span>
+                      {app.user && (
+                        <span style={styles.kycSub}>
+                          {" "}· @{app.user.uid} · {app.user.email}
+                        </span>
+                      )}
                     </div>
-                    <div style={s.kycMeta}>
-                      👤 {u.kyc_full_name}
-                    </div>
-                    <div style={s.kycMeta}>
-                      🏦 {u.wallet?.address || 'No wallet'}
-                    </div>
-                    <div style={s.kycMeta}>
-                      📅 Submitted: {u.kyc_submitted_at
-                        ? new Date(u.kyc_submitted_at).toLocaleString()
-                        : '—'}
-                    </div>
+                    <span style={styles.kycDate}>
+                      {app.submitted_at
+                        ? new Date(app.submitted_at).toLocaleDateString("ru-RU")
+                        : "—"}
+                    </span>
+                  </div>
+                  <div style={styles.kycDoc}>
+                    <span style={styles.docBadge}>
+                      {DOC_LABEL[app.document_type] || app.document_type}
+                    </span>
+                    <span style={styles.kycDocNum}>{app.document_number}</span>
+                  </div>
+                  <div style={styles.kycActions}>
+                    <button style={styles.btnApprove} onClick={() => approveKyc(app.id)}>
+                      Одобрить
+                    </button>
+                    <button style={styles.btnReject} onClick={() => setRejectModal({ kycId: app.id })}>
+                      Отклонить
+                    </button>
                   </div>
                 </div>
-                <div style={s.kycActions}>
-                  <button style={s.approveBtn} onClick={() => approve(u.id)}>
-                    ✅ Approve
-                  </button>
-                  <button style={s.rejectBtn} onClick={() => reject(u.id)}>
-                    ❌ Reject
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
-        {/* All Users */}
-        {tab === 'All Users' && (
-          <div>
-            <h2 style={s.pageTitle}>All Users</h2>
-            {loading && <p style={s.muted}>Loading...</p>}
-            <table style={s.table}>
-              <thead>
-                <tr>
-                  {['ID','Username','Email','Role','KYC','Active','Actions'].map(h => (
-                    <th key={h} style={s.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {allUsers.map(u => (
-                  <tr key={u.id} style={s.tr}>
-                    <td style={s.td}>{u.id}</td>
-                    <td style={s.td}><strong>{u.username}</strong></td>
-                    <td style={s.td}>{u.email}</td>
-                    <td style={s.td}>
-                      <span style={{...s.roleBadge, background: roleColor(u.role)}}>
+      {/* All Users */}
+      {tab === "All Users" && !loading && (
+        <div style={styles.tableWrap}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                {["ID", "UID", "Username", "Email", "Роль", "Кошелёк", "Активен", "Действия"].map((h) => (
+                  <th key={h} style={styles.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => {
+                const w = getPrimaryWallet(u);
+                return (
+                  <tr key={u.id} style={styles.tr}>
+                    <td style={styles.td}>{u.id}</td>
+                    <td style={{ ...styles.td, color: "#94a3b8" }}>{u.uid || "—"}</td>
+                    <td style={styles.td}>{u.username}</td>
+                    <td style={{ ...styles.td, color: "#94a3b8" }}>{u.email}</td>
+                    <td style={styles.td}>
+                      <span style={{ ...styles.roleBadge, background: ROLE_COLOR[u.role] || "#334155" }}>
                         {u.role}
                       </span>
                     </td>
-                    <td style={s.td}>
-                      <span style={{...s.roleBadge, background: kycColor(u.kyc_status)}}>
-                        {u.kyc_status}
+                    <td style={{ ...styles.td, color: "#94a3b8", fontSize: 12 }}>
+                      {w ? w.address.slice(0, 6) + "…" + w.address.slice(-4) : "—"}
+                    </td>
+                    <td style={styles.td}>
+                      <span style={{ color: u.is_active ? "#10b981" : "#ef4444" }}>
+                        {u.is_active ? "Да" : "Нет"}
                       </span>
                     </td>
-                    <td style={s.td}>
-                      <span style={{color: u.is_active ? '#4ade80' : '#ef4444'}}>
-                        {u.is_active ? '✅' : '🔒'}
-                      </span>
-                    </td>
-                    <td style={s.td}>
-                      <div style={s.actionRow}>
-                        {user?.role === 'ADMIN' && u.id !== user?.id && (
-                          <>
-                            <select style={s.select}
-                              value={u.role}
-                              onChange={e => changeRole(u.id, e.target.value)}>
-                              <option value="UNVERIFIED">UNVERIFIED</option>
-                              <option value="USER">USER</option>
-                              <option value="MODERATOR">MODERATOR</option>
-                              <option value="ADMIN">ADMIN</option>
-                            </select>
-                            <button style={s.toggleBtn}
-                              onClick={() => toggleActive(u.id)}>
-                              {u.is_active ? 'Ban' : 'Unban'}
-                            </button>
-                          </>
-                        )}
-                      </div>
+                    <td style={styles.td}>
+                      {u.role !== "ADMIN" && (
+                        <button
+                          style={u.is_active ? styles.btnBan : styles.btnUnban}
+                          onClick={() => toggleBan(u.id, u.is_active)}
+                        >
+                          {u.is_active ? "Бан" : "Разбан"}
+                        </button>
+                      )}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {rejectModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modal}>
+            <h3 style={styles.modalTitle}>Причина отклонения</h3>
+            <textarea
+              style={styles.textarea}
+              placeholder="Опишите причину..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+            />
+            <div style={styles.modalBtns}>
+              <button style={styles.btnApprove} onClick={rejectKyc}>
+                Подтвердить
+              </button>
+              <button style={styles.btnBan} onClick={() => { setRejectModal(null); setRejectReason(""); }}>
+                Отмена
+              </button>
+            </div>
           </div>
-        )}
-
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function StatCard({ label, value, color, icon }) {
-  return (
-    <div style={{...s.statCard, borderTop: `3px solid ${color}`}}>
-      <div style={s.statIcon}>{icon}</div>
-      <div style={{...s.statValue, color}}>{value}</div>
-      <div style={s.statLabel}>{label}</div>
-    </div>
-  );
-}
-
-const roleColor = (r) => ({
-  ADMIN:'#7c3aed', MODERATOR:'#1e40af', USER:'#166534', UNVERIFIED:'#374151'
-}[r] || '#374151');
-
-const kycColor = (k) => ({
-  APPROVED:'#166534', PENDING:'#854d0e', REJECTED:'#7f1d1d', NONE:'#374151'
-}[k] || '#374151');
-
-const s = {
-  wrap: { display:'flex', minHeight:'90vh', background:'#0f172a' },
-  toast: { position:'fixed', top:20, right:20, background:'#1e293b', color:'#f1f5f9',
-    padding:'12px 20px', borderRadius:8, border:'1px solid #334155',
-    zIndex:1000, fontSize:14, boxShadow:'0 4px 20px rgba(0,0,0,0.4)' },
-  sidebar: { width:220, background:'#1e293b', borderRight:'1px solid #334155',
-    padding:'24px 0' },
-  sidebarTitle: { color:'#f1f5f9', fontWeight:700, fontSize:14,
-    padding:'0 16px 20px', borderBottom:'1px solid #334155', marginBottom:8 },
-  tabItem: { padding:'12px 20px', color:'#cbd5e1', cursor:'pointer', fontSize:14,
-    borderRadius:6, margin:'2px 8px', display:'flex', alignItems:'center', gap:4 },
-  badge: { marginLeft:'auto', background:'#dc2626', color:'#fff',
-    borderRadius:10, padding:'2px 7px', fontSize:11, fontWeight:700 },
-  content: { flex:1, padding:32, overflowY:'auto' },
-  pageTitle: { color:'#f1f5f9', marginBottom:24, fontSize:20, fontWeight:700 },
-  statsGrid: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, marginBottom:24 },
-  statCard: { background:'#1e293b', borderRadius:10, padding:20, textAlign:'center' },
-  statIcon: { fontSize:28, marginBottom:8 },
-  statValue: { fontSize:32, fontWeight:800, marginBottom:4 },
-  statLabel: { color:'#64748b', fontSize:13 },
-  alert: { background:'#451a03', border:'1px solid #92400e', color:'#fbbf24',
-    padding:'14px 20px', borderRadius:8, cursor:'pointer', fontSize:14 },
-  empty: { textAlign:'center', color:'#64748b', padding:60 },
-  muted: { color:'#64748b', padding:20 },
-  kycCard: { background:'#1e293b', borderRadius:10, padding:20, marginBottom:12,
-    display:'flex', justifyContent:'space-between', alignItems:'flex-start',
-    border:'1px solid #334155' },
-  kycLeft: { display:'flex', gap:16, flex:1 },
-  kycAvatar: { width:48, height:48, borderRadius:'50%', background:'#0369a1',
-    display:'flex', alignItems:'center', justifyContent:'center',
-    color:'#fff', fontWeight:700, fontSize:18, flexShrink:0 },
-  kycName: { color:'#f1f5f9', fontWeight:600, fontSize:15, marginBottom:4 },
-  kycEmail: { color:'#94a3b8', fontSize:13, marginBottom:6 },
-  kycMeta: { color:'#64748b', fontSize:12, marginBottom:3 },
-  kycActions: { display:'flex', flexDirection:'column', gap:8, marginLeft:16 },
-  approveBtn: { padding:'10px 20px', background:'#166534', color:'#4ade80',
-    border:'1px solid #16a34a', borderRadius:6, cursor:'pointer', fontWeight:600, fontSize:13 },
-  rejectBtn: { padding:'10px 20px', background:'#7f1d1d', color:'#f87171',
-    border:'1px solid #dc2626', borderRadius:6, cursor:'pointer', fontWeight:600, fontSize:13 },
-  table: { width:'100%', borderCollapse:'collapse' },
-  th: { textAlign:'left', color:'#64748b', fontSize:12, fontWeight:600,
-    padding:'10px 12px', borderBottom:'1px solid #334155' },
-  tr: { borderBottom:'1px solid #1e293b' },
-  td: { padding:'12px', color:'#cbd5e1', fontSize:13, verticalAlign:'middle' },
-  roleBadge: { padding:'3px 8px', borderRadius:12, fontSize:11, color:'#fff', fontWeight:600 },
-  actionRow: { display:'flex', gap:8, alignItems:'center' },
-  select: { background:'#0f172a', color:'#f1f5f9', border:'1px solid #334155',
-    borderRadius:4, padding:'4px 8px', fontSize:12 },
-  toggleBtn: { padding:'4px 12px', background:'#7f1d1d', color:'#f87171',
-    border:'1px solid #dc2626', borderRadius:4, cursor:'pointer', fontSize:12 },
+const styles = {
+  container: { maxWidth: 960, margin: "0 auto", padding: "32px 16px", color: "#e2e8f0" },
+  title: { fontSize: 28, fontWeight: 700, margin: "0 0 20px", color: "#f1f5f9" },
+  tabs: { display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" },
+  tab: { padding: "8px 20px", background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#94a3b8", cursor: "pointer", fontSize: 14, fontWeight: 500 },
+  tabActive: { background: "#3b82f6", border: "1px solid #3b82f6", color: "#fff" },
+  toast: { background: "#1e293b", border: "1px solid #334155", color: "#e2e8f0", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 14 },
+  hint: { color: "#64748b", fontSize: 15 },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 16 },
+  statCard: { background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: "20px 16px", textAlign: "center" },
+  statValue: { fontSize: 32, fontWeight: 700 },
+  statLabel: { fontSize: 13, color: "#64748b", marginTop: 4 },
+  cardList: { display: "flex", flexDirection: "column", gap: 16 },
+  kycCard: { background: "#1e293b", border: "1px solid #334155", borderRadius: 12, padding: 20 },
+  kycMeta: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 },
+  kycName: { fontWeight: 600, fontSize: 16, color: "#f1f5f9" },
+  kycSub: { fontSize: 13, color: "#64748b" },
+  kycDate: { fontSize: 13, color: "#64748b", flexShrink: 0 },
+  kycDoc: { display: "flex", alignItems: "center", gap: 8, marginBottom: 14 },
+  docBadge: { background: "#0f172a", border: "1px solid #334155", borderRadius: 6, padding: "2px 8px", fontSize: 12, color: "#94a3b8" },
+  kycDocNum: { fontSize: 14, color: "#e2e8f0" },
+  kycActions: { display: "flex", gap: 10 },
+  btnApprove: { padding: "8px 18px", background: "#166534", border: "1px solid #16a34a", color: "#86efac", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 500 },
+  btnReject: { padding: "8px 18px", background: "#450a0a", border: "1px solid #7f1d1d", color: "#fca5a5", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 500 },
+  tableWrap: { overflowX: "auto" },
+  table: { width: "100%", borderCollapse: "collapse", fontSize: 14 },
+  th: { padding: "10px 12px", background: "#1e293b", borderBottom: "1px solid #334155", textAlign: "left", color: "#64748b", fontWeight: 600, whiteSpace: "nowrap" },
+  tr: { borderBottom: "1px solid #1e293b" },
+  td: { padding: "10px 12px", color: "#e2e8f0", verticalAlign: "middle" },
+  roleBadge: { padding: "2px 8px", borderRadius: 20, fontSize: 12, fontWeight: 600, color: "#fff" },
+  btnBan: { padding: "5px 12px", background: "#450a0a", border: "1px solid #7f1d1d", color: "#fca5a5", borderRadius: 6, cursor: "pointer", fontSize: 13 },
+  btnUnban: { padding: "5px 12px", background: "#052e16", border: "1px solid #166534", color: "#86efac", borderRadius: 6, cursor: "pointer", fontSize: 13 },
+  modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 },
+  modal: { background: "#1e293b", border: "1px solid #334155", borderRadius: 16, padding: 28, width: "100%", maxWidth: 440 },
+  modalTitle: { fontSize: 18, fontWeight: 600, margin: "0 0 16px", color: "#f1f5f9" },
+  textarea: { width: "100%", padding: "10px 12px", background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#f1f5f9", fontSize: 14, resize: "vertical", boxSizing: "border-box", marginBottom: 16 },
+  modalBtns: { display: "flex", gap: 10 },
 };

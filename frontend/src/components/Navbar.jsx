@@ -29,6 +29,7 @@ export default function Navbar() {
             <Link to="/kyc" style={styles.link}>KYC</Link>
             <Link to="/chat" style={styles.link}>Chat</Link>
             <Link to="/graph" style={styles.link}>Network</Link>
+	    <Link to="/profile" style={styles.link}>Profile</Link>
             {role === 'ADMIN' && (
               <Link to="/admin" style={styles.adminLink}>👑 Admin</Link>
             )}

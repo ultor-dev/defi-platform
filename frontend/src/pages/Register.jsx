@@ -16,7 +16,12 @@ export default function Register() {
       setSuccess(true);
       setTimeout(() => navigate('/login'), 1500);
     } catch (e) {
-      setError(e.response?.data?.detail || 'Registration failed');
+      const detail = e.response?.data?.detail;
+      if (Array.isArray(detail)) {
+	setError(detail.map(d => d.msg).join(', '));
+      } else {
+	setError(detail || 'Registration failed');
+      }
     }
   };
 

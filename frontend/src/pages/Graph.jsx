@@ -2,246 +2,189 @@ import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import api from '../api';
 
-const ROLE_COLOR = {
-  ADMIN: '#f59e0b',
-  USER: '#38bdf8',
-  UNVERIFIED: '#64748b',
-};
-
-const KYC_RING = {
-  APPROVED: '#4ade80',
-  PENDING: '#fbbf24',
-  REJECTED: '#ef4444',
-  NONE: '#334155',
+const NODE_COLOR = {
+  ADMIN: "#7c3aed",
+  USER: "#0284c7",
+  UNVERIFIED: "#475569",
 };
 
 export default function Graph() {
   const svgRef = useRef(null);
-  const [data, setData] = useState(null);
-  const [selected, setSelected] = useState(null);
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [stats, setStats] = useState({ nodes: 0, links: 0 });
 
-  useEffect(() => {
-    api.get('/admin/network/graph')
-      .then(r => setData(r.data))
-      .catch(() => setError('Failed to load network data'));
-  }, []);
+  useEffect(() => { fetchGraph(); }, []);
 
-  useEffect(() => {
-    if (!data || !svgRef.current) return;
+  const fetchGraph = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await api.get("/admin/network/graph");
+      const { nodes = [], links = [] } = res.data;
+      setStats({ nodes: nodes.length, links: links.length });
+      drawD3(nodes, links);
+    } catch (e) {
+      setError(e.response?.data?.detail || "Ошибка загрузки графа");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const width = svgRef.current.clientWidth || 900;
-    const height = 600;
+  const drawD3 = (nodes, links) => {
+    const container = svgRef.current?.parentElement;
+    if (!container) return;
 
-    d3.select(svgRef.current).selectAll('*').remove();
+    const width = container.clientWidth || 800;
+    const height = 520;
+
+    d3.select(svgRef.current).selectAll("*").remove();
 
     const svg = d3.select(svgRef.current)
-      .attr('viewBox', `0 0 ${width} ${height}`)
-      .style('background', '#0f172a');
+      .attr("width", width)
+      .attr("height", height);
 
-    const defs = svg.append('defs');
-    const filter = defs.append('filter').attr('id', 'glow');
-    filter.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'coloredBlur');
-    const feMerge = filter.append('feMerge');
-    feMerge.append('feMergeNode').attr('in', 'coloredBlur');
-    feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+    const g = svg.append("g");
 
-    const nodes = data.nodes.map(d => ({ ...d }));
-    const links = data.links.map(d => ({ ...d }));
+    svg.call(
+      d3.zoom().scaleExtent([0.3, 3]).on("zoom", (event) => {
+        g.attr("transform", event.transform);
+      })
+    );
+
+    // Стрелки
+    svg.append("defs")
+      .append("marker")
+      .attr("id", "arrow")
+      .attr("viewBox", "0 -5 10 10")
+      .attr("refX", 22)
+      .attr("refY", 0)
+      .attr("markerWidth", 6)
+      .attr("markerHeight", 6)
+      .attr("orient", "auto")
+      .append("path")
+      .attr("d", "M0,-5L10,0L0,5")
+      .attr("fill", "#475569");
+
+    // Привязываем source/target по id (address)
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    const validLinks = links
+      .map(l => ({
+        source: typeof l.source === 'object' ? l.source.id || l.source.address : l.source,
+        target: typeof l.target === 'object' ? l.target.id || l.target.address : l.target,
+        amount: l.amount,
+        hash: l.hash,
+      }))
+      .filter(l => nodeMap.has(l.source) && nodeMap.has(l.target));
 
     const simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(links).id(d => d.id).distance(160))
-      .force('charge', d3.forceManyBody().strength(-400))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide(50));
+      .force("link", d3.forceLink(validLinks)
+        .id(d => d.id)
+        .distance(120))
+      .force("charge", d3.forceManyBody().strength(-300))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("collision", d3.forceCollide(40));
 
-    const link = svg.append('g')
-      .selectAll('line')
-      .data(links)
-      .join('line')
-      .attr('stroke', '#334155')
-      .attr('stroke-width', 1.5)
-      .attr('stroke-dasharray', '5,3')
-      .attr('opacity', 0.6);
+    // Links
+    const link = g.append("g")
+      .selectAll("line")
+      .data(validLinks)
+      .join("line")
+      .attr("stroke", "#334155")
+      .attr("stroke-width", 1.5)
+      .attr("marker-end", "url(#arrow)");
 
-    const linkLabel = svg.append('g')
-      .selectAll('text')
-      .data(links)
-      .join('text')
-      .attr('fill', '#475569')
-      .attr('font-size', 10)
-      .attr('text-anchor', 'middle')
-      .attr('font-family', 'monospace')
-      .text(d => d.type);
-
-    const node = svg.append('g')
-      .selectAll('g')
+    // Nodes group
+    const node = g.append("g")
+      .selectAll("g")
       .data(nodes)
-      .join('g')
-      .style('cursor', 'pointer')
-      .call(d3.drag()
-        .on('start', (event, d) => {
-          if (!event.active) simulation.alphaTarget(0.3).restart();
-          d.fx = d.x; d.fy = d.y;
-        })
-        .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
-        .on('end', (event, d) => {
-          if (!event.active) simulation.alphaTarget(0);
-          d.fx = null; d.fy = null;
-        })
-      )
-      .on('click', (event, d) => setSelected(d));
+      .join("g")
+      .call(
+        d3.drag()
+          .on("start", (event, d) => {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x; d.fy = d.y;
+          })
+          .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+          .on("end", (event, d) => {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null; d.fy = null;
+          })
+      );
 
-    node.append('circle')
-      .attr('r', 26)
-      .attr('fill', 'none')
-      .attr('stroke', d => KYC_RING[d.kyc_status] || '#334155')
-      .attr('stroke-width', 3);
+    // Круги
+    node.append("circle")
+      .attr("r", d => d.role === "ADMIN" ? 18 : 14)
+      .attr("fill", d => NODE_COLOR[d.role] || "#334155")
+      .attr("stroke", "#0f172a")
+      .attr("stroke-width", 2);
 
-    node.append('circle')
-      .attr('r', 22)
-      .attr('fill', d => ROLE_COLOR[d.role] || '#64748b')
-      .attr('opacity', 0.9)
-      .attr('filter', 'url(#glow)');
+    // Лейблы
+    node.append("text")
+      .attr("text-anchor", "middle")
+      .attr("dy", 28)
+      .attr("font-size", 11)
+      .attr("fill", "#94a3b8")
+      .text(d => d.username || d.uid || "?");
 
-    node.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'central')
-      .attr('fill', '#0f172a')
-      .attr('font-size', 14)
-      .attr('font-weight', 'bold')
-      .attr('font-family', 'Arial')
-      .text(d => d.username[0].toUpperCase());
+    // Tooltip
+    node.append("title")
+      .text(d => `${d.username} (${d.role})\n${d.address?.slice(0, 10)}...${d.address?.slice(-4)}`);
 
-    node.append('text')
-      .attr('y', 36)
-      .attr('text-anchor', 'middle')
-      .attr('fill', '#cbd5e1')
-      .attr('font-size', 11)
-      .attr('font-family', 'Arial')
-      .text(d => d.username);
-
-    node.append('text')
-      .attr('y', 49)
-      .attr('text-anchor', 'middle')
-      .attr('fill', '#475569')
-      .attr('font-size', 9)
-      .attr('font-family', 'monospace')
-      .text(d => d.address.slice(0, 8) + '...' + d.address.slice(-4));
-
-    simulation.on('tick', () => {
+    simulation.on("tick", () => {
       link
-        .attr('x1', d => d.source.x)
-        .attr('y1', d => d.source.y)
-        .attr('x2', d => d.target.x)
-        .attr('y2', d => d.target.y);
-
-      linkLabel
-        .attr('x', d => (d.source.x + d.target.x) / 2)
-        .attr('y', d => (d.source.y + d.target.y) / 2);
-
-      node.attr('transform', d => `translate(${d.x},${d.y})`);
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+      node.attr("transform", d => `translate(${d.x},${d.y})`);
     });
-
-    return () => simulation.stop();
-  }, [data]);
+  };
 
   return (
-    <div style={s.wrap}>
+    <div style={s.container}>
       <div style={s.header}>
-        <h2 style={s.title}>⬡ Wallet Network Graph</h2>
-        <div style={s.legend}>
-          <LegendItem color="#f59e0b" label="Admin" />
-          <LegendItem color="#38bdf8" label="User" />
-          <LegendItem color="#64748b" label="Unverified" />
-          <div style={s.divider} />
-          <LegendItem color="#4ade80" label="KYC Approved" ring />
-          <LegendItem color="#fbbf24" label="KYC Pending" ring />
-          <LegendItem color="#ef4444" label="KYC Rejected" ring />
+        <div>
+          <h1 style={s.title}>Network Graph</h1>
+          <p style={s.subtitle}>Кошельки и транзакции</p>
         </div>
+        <button style={s.btn} onClick={fetchGraph}>Обновить</button>
       </div>
 
-      {error && <p style={s.error}>{error}</p>}
-
-      <div style={s.graphWrap}>
-        <svg ref={svgRef} style={s.svg} />
-        {selected && (
-          <div style={s.panel}>
-            <div style={s.panelHeader}>
-              <div style={{...s.avatar, background: ROLE_COLOR[selected.role]}}>
-                {selected.username[0].toUpperCase()}
-              </div>
-              <div>
-                <div style={s.panelName}>{selected.username}</div>
-                <div style={s.panelRole}>{selected.role}</div>
-              </div>
-              <button style={s.closeBtn} onClick={() => setSelected(null)}>✕</button>
-            </div>
-            <div style={s.panelBody}>
-              <InfoRow label="Address" value={selected.address} mono />
-              <InfoRow label="KYC Status" value={selected.kyc_status} />
-              <InfoRow label="Role" value={selected.role} />
-            </div>
+      <div style={s.legend}>
+        {Object.entries(NODE_COLOR).map(([role, color]) => (
+          <div key={role} style={s.legendItem}>
+            <span style={{ ...s.dot, background: color }} />
+            <span>{role}</span>
           </div>
+        ))}
+        {!loading && (
+          <span style={s.count}>{stats.nodes} узлов · {stats.links} связей</span>
         )}
       </div>
 
-      {data && (
-        <div style={s.stats}>
-          <span style={s.stat}>⬡ {data.nodes.length} wallets</span>
-          <span style={s.stat}>⟷ {data.links.length} connections</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LegendItem({ color, label, ring }) {
-  return (
-    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-      <div style={{
-        width: 12, height: 12, borderRadius: '50%',
-        background: ring ? 'transparent' : color,
-        border: ring ? `2px solid ${color}` : 'none',
-      }} />
-      <span style={{ color:'#94a3b8', fontSize:12 }}>{label}</span>
-    </div>
-  );
-}
-
-function InfoRow({ label, value, mono }) {
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ color:'#64748b', fontSize:11, marginBottom:2 }}>{label}</div>
-      <div style={{ color:'#f1f5f9', fontSize: mono ? 11 : 13,
-        fontFamily: mono ? 'monospace' : 'Arial', wordBreak:'break-all' }}>
-        {value}
+      <div style={s.wrap}>
+        {loading && <div style={s.overlay}><p style={{ color: "#94a3b8" }}>Загрузка...</p></div>}
+        {error && <div style={s.overlay}><p style={{ color: "#ef4444" }}>{error}</p></div>}
+        <svg ref={svgRef} style={{ width: "100%", height: 520 }} />
       </div>
+
+      <p style={s.hint}>Перетаскивайте узлы мышью. Колесо — масштаб.</p>
     </div>
   );
 }
 
 const s = {
-  wrap: { background:'#0f172a', minHeight:'90vh', display:'flex', flexDirection:'column' },
-  header: { padding:'20px 32px', borderBottom:'1px solid #1e293b',
-    display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:12 },
-  title: { color:'#38bdf8', margin:0, fontSize:18, fontWeight:700 },
-  legend: { display:'flex', gap:16, alignItems:'center', flexWrap:'wrap' },
-  divider: { width:1, height:16, background:'#334155' },
-  graphWrap: { flex:1, position:'relative', minHeight:600 },
-  svg: { width:'100%', height:600, display:'block' },
-  error: { color:'#ef4444', textAlign:'center', padding:20 },
-  panel: { position:'absolute', top:16, right:16, width:280,
-    background:'#1e293b', border:'1px solid #334155', borderRadius:12, padding:16 },
-  panelHeader: { display:'flex', alignItems:'center', gap:12, marginBottom:16 },
-  avatar: { width:40, height:40, borderRadius:'50%', display:'flex',
-    alignItems:'center', justifyContent:'center', color:'#0f172a',
-    fontWeight:700, fontSize:16, flexShrink:0 },
-  panelName: { color:'#f1f5f9', fontWeight:600, fontSize:14 },
-  panelRole: { color:'#64748b', fontSize:12 },
-  closeBtn: { marginLeft:'auto', background:'none', border:'none',
-    color:'#64748b', cursor:'pointer', fontSize:16 },
-  panelBody: {},
-  stats: { padding:'12px 32px', borderTop:'1px solid #1e293b', display:'flex', gap:24 },
-  stat: { color:'#475569', fontSize:13 },
+  container: { maxWidth: 960, margin: "0 auto", padding: "32px 16px", color: "#e2e8f0" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
+  title: { fontSize: 28, fontWeight: 700, margin: "0 0 4px", color: "#f1f5f9" },
+  subtitle: { color: "#64748b", margin: 0, fontSize: 14 },
+  btn: { padding: "8px 18px", background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#94a3b8", cursor: "pointer", fontSize: 14 },
+  legend: { display: "flex", alignItems: "center", gap: 20, marginBottom: 16, flexWrap: "wrap" },
+  legendItem: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#94a3b8" },
+  dot: { width: 12, height: 12, borderRadius: "50%", display: "inline-block" },
+  count: { fontSize: 13, color: "#475569", marginLeft: "auto" },
+  wrap: { background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, overflow: "hidden", position: "relative", minHeight: 520 },
+  overlay: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0f172a", zIndex: 2 },
+  hint: { fontSize: 13, color: "#475569", marginTop: 10 },
 };
