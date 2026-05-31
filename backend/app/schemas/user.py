@@ -1,7 +1,8 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
-from datetime import datetime
-from app.models.user import UserRole, KYCStatus
+from typing import Optional, List
+from datetime import datetime, date
+from app.models.user import UserRole
+from app.models.kyc import KYCStatus
 
 
 class RegisterRequest(BaseModel):
@@ -38,18 +39,56 @@ class KYCReviewRequest(BaseModel):
 
 
 class WalletOut(BaseModel):
+    id: int
     address: str
+    label: str
+    is_primary: bool
     created_at: datetime
+    model_config = {"from_attributes": True}
+
+
+class ProfileOut(BaseModel):
+    full_name: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    country: Optional[str] = None
+    phone: Optional[str] = None
+    telegram: Optional[str] = None
+    birth_date: Optional[date] = None
+    model_config = {"from_attributes": True}
+
+
+class ProfileUpdateRequest(BaseModel):
+    full_name: Optional[str] = Field(None, max_length=255)
+    bio: Optional[str] = Field(None, max_length=1000)
+    avatar_url: Optional[str] = Field(None, max_length=512)
+    country: Optional[str] = Field(None, max_length=64)
+    phone: Optional[str] = Field(None, max_length=32)
+    telegram: Optional[str] = Field(None, max_length=64)
+    birth_date: Optional[date] = None
+
+
+class KYCApplicationOut(BaseModel):
+    id: int
+    status: KYCStatus
+    full_name: str
+    document_type: str
+    document_number: str
+    rejection_reason: Optional[str] = None
+    submitted_at: datetime
+    reviewed_at: Optional[datetime] = None
     model_config = {"from_attributes": True}
 
 
 class UserOut(BaseModel):
     id: int
+    uid: str
     email: str
     username: str
     role: UserRole
-    kyc_status: KYCStatus
-    email_verified: bool = False
-    wallet: Optional[WalletOut] = None
+    email_verified: bool
+    is_active: bool
+    wallets: List[WalletOut] = []
+    profile: Optional[ProfileOut] = None
     created_at: datetime
     model_config = {"from_attributes": True}

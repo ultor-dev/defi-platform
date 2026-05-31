@@ -7,7 +7,8 @@ from sqlalchemy.orm import joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user, require_admin
-from app.models.user import User, UserRole, KYCStatus
+from app.models.user import User, UserRole
+from app.models.kyc import KYCApplication, KYCStatus
 from app.schemas.user import KYCSubmitRequest, KYCReviewRequest, UserOut
 from app.services.blockchain_service import mint_tokens
 

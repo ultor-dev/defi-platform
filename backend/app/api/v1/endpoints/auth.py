@@ -9,7 +9,7 @@ from app.core.security import (
     create_access_token, create_refresh_token, decode_token,
     get_current_user,
 )
-from app.models.user import User, Wallet
+from app.models.user import User, Wallet, Profile
 from app.schemas.user import (
     RegisterRequest, LoginRequest, TokenResponse,
     RefreshRequest, UserOut,
@@ -17,6 +17,15 @@ from app.schemas.user import (
 from app.services.wallet_service import generate_wallet
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+async def get_user_with_relations(user_id: int, db: AsyncSession) -> User:
+    result = await db.execute(
+        select(User)
+        .options(joinedload(User.wallets), joinedload(User.profile))
+        .where(User.id == user_id)
+    )
+    return result.unique().scalar_one_or_none()
 
 
 @router.post("/register", response_model=UserOut, status_code=201)
@@ -35,19 +44,23 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
 
+    # Создаём профиль
+    profile = Profile(user_id=user.id)
+    db.add(profile)
+
+    # Создаём первичный кошелёк
     wallet_data = generate_wallet()
     wallet = Wallet(
         user_id=user.id,
         address=wallet_data["address"],
         encrypted_private_key=wallet_data["encrypted_private_key"],
+        label="Main wallet",
+        is_primary=True,
     )
     db.add(wallet)
     await db.commit()
 
-    result = await db.execute(
-        select(User).options(joinedload(User.wallet)).where(User.id == user.id)
-    )
-    return result.scalar_one()
+    return await get_user_with_relations(user.id, db)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -72,7 +85,6 @@ async def refresh(body: RefreshRequest):
     payload = decode_token(body.refresh_token)
     if payload.get("type") != "refresh":
         raise HTTPException(401, "Invalid token type")
-
     token_data = {"sub": payload["sub"], "role": payload.get("role")}
     return TokenResponse(
         access_token=create_access_token(token_data),
@@ -82,7 +94,4 @@ async def refresh(body: RefreshRequest):
 
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(User).options(joinedload(User.wallet)).where(User.id == current_user.id)
-    )
-    return result.scalar_one()
+    return await get_user_with_relations(current_user.id, db)

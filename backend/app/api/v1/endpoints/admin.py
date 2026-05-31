@@ -5,7 +5,8 @@ from sqlalchemy.orm import joinedload
 
 from app.core.database import get_db
 from app.core.security import require_admin, require_admin, get_current_user
-from app.models.user import User, UserRole, KYCStatus
+from app.models.user import User, UserRole
+from app.models.kyc import KYCApplication, KYCStatus
 from app.schemas.user import KYCReviewRequest, UserOut
 
 router = APIRouter(prefix="/admin", tags=["admin"])
