@@ -1,366 +1,315 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '../api';
 
-const STATUS_LABELS = {
-  PENDING: { label: "На рассмотрении", color: "#f59e0b" },
-  APPROVED: { label: "Одобрено", color: "#10b981" },
-  REJECTED: { label: "Отклонено", color: "#ef4444" },
+const styles = {
+  page: {
+    minHeight: '100vh',
+    background: 'linear-gradient(135deg, #0f172a 0%, #020617 100%)',
+    padding: '40px 20px',
+    color: '#e2e8f0',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+  },
+  container: {
+    maxWidth: '780px',
+    margin: '0 auto',
+  },
+  headerBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '14px',
+    background: 'rgba(30, 64, 175, 0.15)',
+    border: '1px solid rgba(59, 130, 246, 0.3)',
+    borderRadius: '9999px',
+    padding: '12px 32px',
+    marginBottom: '16px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+  },
+  icon: {
+    width: '42px',
+    height: '42px',
+    background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+    borderRadius: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '24px',
+    boxShadow: '0 4px 15px rgba(59, 130, 246, 0.5)',
+  },
+  title: {
+    fontSize: '28px',
+    fontWeight: '700',
+    color: 'white',
+    margin: 0,
+  },
+  subtitle: {
+    textAlign: 'center',
+    color: '#94a3b8',
+    fontSize: '15.5px',
+    marginBottom: '40px',
+  },
+  statusCard: {
+    background: 'linear-gradient(135deg, #064e3b, #14532d)',
+    border: '1px solid #34d399',
+    borderRadius: '20px',
+    padding: '24px',
+    marginBottom: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px',
+    boxShadow: '0 10px 30px rgba(16, 185, 129, 0.15)',
+  },
+  formCard: {
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(148,163,184,0.15)',
+    borderRadius: '20px',
+    padding: '36px',
+    boxShadow: '0 15px 35px rgba(0,0,0,0.4)',
+  },
+  label: {
+    display: 'block',
+    color: '#cbd5e1',
+    fontSize: '14.5px',
+    marginBottom: '8px',
+    fontWeight: '500',
+  },
+  input: {
+    width: '100%',
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(148,163,184,0.2)',
+    borderRadius: '12px',
+    padding: '16px 20px',
+    color: 'white',
+    fontSize: '16px',
+    outline: 'none',
+  },
+  button: {
+    width: '100%',
+    background: 'linear-gradient(90deg, #2563eb, #4f46e5)',
+    color: 'white',
+    fontSize: '17px',
+    fontWeight: '600',
+    padding: '16px',
+    borderRadius: '12px',
+    border: 'none',
+    cursor: 'pointer',
+    marginTop: '10px',
+    boxShadow: '0 8px 25px rgba(37, 99, 235, 0.35)',
+  },
+  historyCard: {
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(148,163,184,0.15)',
+    borderRadius: '18px',
+    padding: '24px',
+  },
 };
 
-const DOCUMENT_TYPES = [
-  { value: "passport", label: "Паспорт" },
-  { value: "id_card", label: "ID-карта" },
-  { value: "drivers_license", label: "Водительское удостоверение" },
-];
-
 export default function KYC() {
-  const [applications, setApplications] = useState([]);
-  const [latestStatus, setLatestStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
   const [form, setForm] = useState({
-    full_name: "",
-    document_type: "passport",
-    document_number: "",
+    full_name: '',
+    document_type: 'passport',
+    document_number: '',
   });
+  const [status, setStatus] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
 
   useEffect(() => {
     fetchStatus();
+    fetchHistory();
   }, []);
 
   const fetchStatus = async () => {
-    setLoading(true);
     try {
-      // Получаем историю заявок
-      const [histRes, statusRes] = await Promise.allSettled([
-        api.get("/kyc/my-applications"),
-        api.get("/kyc/status"),
-      ]);
+      const res = await api.get('/kyc/status');
+      setStatus(res.data);
+    } catch (err) {
+      setStatus({ status: 'none' });
+    }
+  };
 
-      if (histRes.status === "fulfilled") {
-        setApplications(histRes.value.data);
-      }
-      if (statusRes.status === "fulfilled") {
-        setLatestStatus(statusRes.value.data);
-      }
-    } catch (e) {
-      // Нет заявок — нормально
+  const fetchHistory = async () => {
+    try {
+      const res = await api.get('/kyc/history');
+      setHistory(res.data);
+    } catch (e) {}
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      await api.post('/kyc/submit', form);
+      setMessage({ type: 'success', text: 'Заявка успешно отправлена!' });
+      fetchStatus();
+      fetchHistory();
+    } catch (err) {
+      setMessage({
+        type: 'error',
+        text: err.response?.data?.detail || 'Ошибка при отправке заявки'
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async () => {
-    setError("");
-    setSuccess("");
-
-    if (!form.full_name.trim()) return setError("Введите полное имя");
-    if (!form.document_number.trim()) return setError("Введите номер документа");
-
-    setSubmitting(true);
-    try {
-      await api.post("/kyc/submit", form);
-      setSuccess("Заявка отправлена! Ожидайте проверки.");
-      setForm({ full_name: "", document_type: "passport", document_number: "" });
-      await fetchStatus();
-    } catch (e) {
-      setError(e.response?.data?.detail || "Ошибка при отправке заявки");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Можно ли подать новую заявку
-  const canSubmit =
-    !latestStatus ||
-    latestStatus.status === "REJECTED" ||
-    applications.length === 0;
-
-  if (loading) {
-    return (
-      <div style={styles.container}>
-        <p style={{ color: "#94a3b8" }}>Загрузка...</p>
-      </div>
-    );
-  }
-
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>KYC Верификация</h1>
-      <p style={styles.subtitle}>
-        Пройдите верификацию личности для получения полного доступа к платформе.
-      </p>
+    <div style={styles.page}>
+      <div style={styles.container}>
 
-      {/* Текущий статус */}
-      {latestStatus && (
-        <div style={styles.statusCard}>
-          <div style={styles.statusHeader}>
-            <span style={styles.statusLabel}>Последняя заявка</span>
-            <span
-              style={{
-                ...styles.statusBadge,
-                background: STATUS_LABELS[latestStatus.status]?.color || "#64748b",
-              }}
-            >
-              {STATUS_LABELS[latestStatus.status]?.label || latestStatus.status}
-            </span>
+        {/* Заголовок */}
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <div style={styles.headerBadge}>
+            <div style={styles.icon}>🛡️</div>
+            <h1 style={styles.title}>Верификация KYC</h1>
           </div>
+          <p style={styles.subtitle}>
+            Подтвердите свою личность для получения полного доступа к финансовым операциям
+          </p>
+        </div>
 
-          {latestStatus.status === "APPROVED" && (
-            <p style={{ color: "#10b981", marginTop: 8 }}>
-              ✅ Ваша личность подтверждена. Вам начислено 100 DPT.
-            </p>
-          )}
-
-          {latestStatus.status === "REJECTED" && latestStatus.rejection_reason && (
-            <div style={styles.rejectionBox}>
-              <strong>Причина отклонения:</strong>
-              <p style={{ margin: "4px 0 0" }}>{latestStatus.rejection_reason}</p>
+        {/* Статус */}
+        {status && status.status === 'APPROVED' && (
+          <div style={styles.statusCard}>
+            <div style={{ fontSize: '42px' }}>✅</div>
+            <div>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '22px', color: '#34d399' }}>
+                Верификация пройдена
+              </h3>
+              <p style={{ margin: 0, color: '#a7f3d0', fontSize: '15px' }}>
+                Вы можете пользоваться всеми функциями платформы, включая переводы и торговлю.
+              </p>
             </div>
-          )}
-
-          {latestStatus.status === "PENDING" && (
-            <p style={{ color: "#94a3b8", marginTop: 8 }}>
-              Заявка на рассмотрении. Обычно проверка занимает до 24 часов.
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Форма подачи */}
-      {canSubmit && (
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>
-            {latestStatus?.status === "REJECTED"
-              ? "Подать повторную заявку"
-              : "Подать заявку на верификацию"}
-          </h2>
-
-          {error && <div style={styles.error}>{error}</div>}
-          {success && <div style={styles.successMsg}>{success}</div>}
-
-          <div style={styles.field}>
-            <label style={styles.fieldLabel}>Полное имя (как в документе)</label>
-            <input
-              style={styles.input}
-              placeholder="Иванов Иван Иванович"
-              value={form.full_name}
-              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-            />
           </div>
+        )}
 
-          <div style={styles.field}>
-            <label style={styles.fieldLabel}>Тип документа</label>
-            <select
-              style={styles.input}
-              value={form.document_type}
-              onChange={(e) => setForm({ ...form, document_type: e.target.value })}
-            >
-              {DOCUMENT_TYPES.map((d) => (
-                <option key={d.value} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
+        {status && status.status === 'PENDING' && (
+          <div style={{ ...styles.statusCard, background: 'linear-gradient(135deg, #78350f, #854d0e)', borderColor: '#fbbf24' }}>
+            <div style={{ fontSize: '42px' }}>⏳</div>
+            <div>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '22px', color: '#fbbf24' }}>
+                Заявка на рассмотрении
+              </h3>
+              <p style={{ margin: 0, color: '#fed7aa', fontSize: '15px' }}>
+                Обычно проверка занимает от 30 минут до 24 часов.
+              </p>
+            </div>
           </div>
+        )}
 
-          <div style={styles.field}>
-            <label style={styles.fieldLabel}>Номер документа</label>
-            <input
-              style={styles.input}
-              placeholder="AB1234567"
-              value={form.document_number}
-              onChange={(e) => setForm({ ...form, document_number: e.target.value })}
-            />
+        {/* Форма */}
+        {(!status || status.status === 'none' || status.status === 'REJECTED') && (
+          <div style={styles.formCard}>
+            <h2 style={{ textAlign: 'center', marginBottom: '28px', fontSize: '24px', color: 'white' }}>
+              Подать заявку
+            </h2>
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div>
+                <label style={styles.label}>Полное имя</label>
+                <input
+                  type="text"
+                  value={form.full_name}
+                  onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                  style={styles.input}
+                  placeholder="Дмитрий Анатольевич Виноградов"
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={styles.label}>Тип документа</label>
+                <select
+                  value={form.document_type}
+                  onChange={(e) => setForm({ ...form, document_type: e.target.value })}
+                  style={styles.input}
+                >
+                  <option value="passport">Паспорт</option>
+                  <option value="id_card">ID-карта</option>
+                  <option value="driver_license">Водительское удостоверение</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={styles.label}>Номер документа</label>
+                <input
+                  type="text"
+                  value={form.document_number}
+                  onChange={(e) => setForm({ ...form, document_number: e.target.value })}
+                  style={styles.input}
+                  placeholder="AA1234567"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  ...styles.button,
+                  opacity: loading ? 0.75 : 1,
+                  cursor: loading ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {loading ? 'Отправка...' : 'Отправить заявку на проверку'}
+              </button>
+            </form>
           </div>
+        )}
 
-          <button
-            style={{
-              ...styles.btn,
-              opacity: submitting ? 0.6 : 1,
-              cursor: submitting ? "not-allowed" : "pointer",
-            }}
-            onClick={handleSubmit}
-            disabled={submitting}
-          >
-            {submitting ? "Отправка..." : "Отправить заявку"}
-          </button>
-        </div>
-      )}
+        {/* Сообщение */}
+        {message.text && (
+          <div style={{
+            marginTop: '24px',
+            padding: '16px',
+            borderRadius: '12px',
+            textAlign: 'center',
+            background: message.type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+            color: message.type === 'success' ? '#34d399' : '#f87171',
+            border: `1px solid ${message.type === 'success' ? '#34d399' : '#f87171'}`,
+          }}>
+            {message.text}
+          </div>
+        )}
 
-      {/* История заявок */}
-      {applications.length > 1 && (
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>История заявок</h2>
-          <div style={styles.timeline}>
-            {applications.map((app, i) => (
-              <div key={app.id || i} style={styles.timelineItem}>
-                <div style={styles.timelineDot} />
-                <div style={styles.timelineContent}>
-                  <div style={styles.timelineHeader}>
-                    <span style={styles.timelineDate}>
-                      {app.submitted_at
-                        ? new Date(app.submitted_at).toLocaleDateString("ru-RU")
-                        : "—"}
-                    </span>
-                    <span
-                      style={{
-                        ...styles.statusBadge,
-                        fontSize: 11,
-                        background:
-                          STATUS_LABELS[app.status]?.color || "#64748b",
-                      }}
-                    >
-                      {STATUS_LABELS[app.status]?.label || app.status}
-                    </span>
+        {/* История */}
+        {history.length > 0 && (
+          <div style={{ marginTop: '50px' }}>
+            <h2 style={{ fontSize: '22px', marginBottom: '20px', color: 'white' }}>
+              История заявок ({history.length})
+            </h2>
+            {history.map((app) => (
+              <div key={app.id} style={styles.historyCard}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontSize: '14px', color: '#64748b' }}>Заявка #{app.id}</div>
+                    <div style={{ fontSize: '18px', fontWeight: '600', margin: '8px 0 4px 0' }}>
+                      {app.full_name}
+                    </div>
                   </div>
-                  <p style={styles.timelineText}>
-                    {app.document_type} · {app.document_number}
-                  </p>
-                  {app.rejection_reason && (
-                    <p style={{ color: "#ef4444", fontSize: 13, margin: "4px 0 0" }}>
-                      {app.rejection_reason}
-                    </p>
-                  )}
+                  <div style={{
+                    padding: '6px 18px',
+                    borderRadius: '9999px',
+                    fontSize: '13.5px',
+                    fontWeight: '600',
+                    background: app.status === 'APPROVED' ? 'rgba(52,211,153,0.2)' : 'rgba(251,191,36,0.2)',
+                    color: app.status === 'APPROVED' ? '#34d399' : '#fbbf24',
+                  }}>
+                    {app.status === 'APPROVED' ? 'Одобрено' : 'На проверке'}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '16px', fontSize: '14px', color: '#94a3b8' }}>
+                  Подано: {new Date(app.submitted_at).toLocaleDateString('ru-RU')}
+                  {app.reviewed_at && ` • Рассмотрено: ${new Date(app.reviewed_at).toLocaleDateString('ru-RU')}`}
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
-
-const styles = {
-  container: {
-    maxWidth: 600,
-    margin: "0 auto",
-    padding: "32px 16px",
-    color: "#e2e8f0",
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 700,
-    margin: "0 0 8px",
-    color: "#f1f5f9",
-  },
-  subtitle: {
-    color: "#94a3b8",
-    margin: "0 0 24px",
-    fontSize: 15,
-  },
-  card: {
-    background: "#1e293b",
-    border: "1px solid #334155",
-    borderRadius: 12,
-    padding: 24,
-    marginBottom: 20,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 600,
-    margin: "0 0 20px",
-    color: "#f1f5f9",
-  },
-  statusCard: {
-    background: "#1e293b",
-    border: "1px solid #334155",
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-  },
-  statusHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  statusLabel: {
-    color: "#94a3b8",
-    fontSize: 14,
-  },
-  statusBadge: {
-    padding: "3px 10px",
-    borderRadius: 20,
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#fff",
-  },
-  rejectionBox: {
-    background: "#450a0a",
-    border: "1px solid #7f1d1d",
-    borderRadius: 8,
-    padding: "10px 14px",
-    marginTop: 10,
-    fontSize: 14,
-    color: "#fca5a5",
-  },
-  field: { marginBottom: 16 },
-  fieldLabel: {
-    display: "block",
-    marginBottom: 6,
-    fontSize: 14,
-    color: "#94a3b8",
-  },
-  input: {
-    width: "100%",
-    padding: "10px 12px",
-    background: "#0f172a",
-    border: "1px solid #334155",
-    borderRadius: 8,
-    color: "#f1f5f9",
-    fontSize: 15,
-    boxSizing: "border-box",
-  },
-  btn: {
-    width: "100%",
-    padding: "12px",
-    background: "#3b82f6",
-    color: "#fff",
-    border: "none",
-    borderRadius: 8,
-    fontSize: 15,
-    fontWeight: 600,
-    marginTop: 4,
-  },
-  error: {
-    background: "#450a0a",
-    border: "1px solid #7f1d1d",
-    color: "#fca5a5",
-    padding: "10px 14px",
-    borderRadius: 8,
-    marginBottom: 16,
-    fontSize: 14,
-  },
-  successMsg: {
-    background: "#052e16",
-    border: "1px solid #166534",
-    color: "#86efac",
-    padding: "10px 14px",
-    borderRadius: 8,
-    marginBottom: 16,
-    fontSize: 14,
-  },
-  timeline: { display: "flex", flexDirection: "column", gap: 16 },
-  timelineItem: { display: "flex", gap: 12, alignItems: "flex-start" },
-  timelineDot: {
-    width: 10,
-    height: 10,
-    borderRadius: "50%",
-    background: "#475569",
-    marginTop: 5,
-    flexShrink: 0,
-  },
-  timelineContent: { flex: 1 },
-  timelineHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  timelineDate: { fontSize: 13, color: "#64748b" },
-  timelineText: { margin: "4px 0 0", fontSize: 14, color: "#94a3b8" },
-};

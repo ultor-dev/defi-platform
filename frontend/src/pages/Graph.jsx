@@ -35,8 +35,8 @@ export default function Graph() {
     const container = svgRef.current?.parentElement;
     if (!container) return;
 
-    const width = container.clientWidth || 800;
-    const height = 520;
+    const width = container.clientWidth || 1000;
+    const height = 820;
 
     d3.select(svgRef.current).selectAll("*").remove();
 
@@ -166,7 +166,7 @@ export default function Graph() {
       <div style={s.wrap}>
         {loading && <div style={s.overlay}><p style={{ color: "#94a3b8" }}>Загрузка...</p></div>}
         {error && <div style={s.overlay}><p style={{ color: "#ef4444" }}>{error}</p></div>}
-        <svg ref={svgRef} style={{ width: "100%", height: 520 }} />
+        <svg ref={svgRef} style={{ width: 1000, height: 800 }} />
       </div>
 
       <p style={s.hint}>Перетаскивайте узлы мышью. Колесо — масштаб.</p>
@@ -175,7 +175,7 @@ export default function Graph() {
 }
 
 const s = {
-  container: { maxWidth: 960, margin: "0 auto", padding: "32px 16px", color: "#e2e8f0" },
+  container: { maxWidth: 1200, margin: "0 auto", padding: "32px 16px", color: "#e2e8f0" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
   title: { fontSize: 28, fontWeight: 700, margin: "0 0 4px", color: "#f1f5f9" },
   subtitle: { color: "#64748b", margin: 0, fontSize: 14 },

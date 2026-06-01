@@ -116,7 +116,7 @@ button {
 ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
 /* ── Адаптив ──────────────────────────────────────────────── */
-@media (max-width: 768px) {
+@media (max-width: 1280px) {
   .page {
     padding: 16px 12px;
   }

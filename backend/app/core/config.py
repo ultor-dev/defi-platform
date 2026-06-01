@@ -31,7 +31,11 @@ class Settings(BaseSettings):
 
     # Email
     RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "nurzhigitzhobonov24@gmail.com"
+    EMAIL_FROM: str = "example@example.com"
     FRONTEND_URL: str = "http://localhost:5173"
+
+    # Hardhat deployer (dev only)
+    HARDHAT_DEPLOYER_KEY: str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    KYC_REWARD_TOKENS: float = 100.0
 
 settings = Settings()

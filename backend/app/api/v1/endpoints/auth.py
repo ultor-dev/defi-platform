@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.core.database import get_db
+from app.utils.user import get_user_with_relations
 from app.core.security import (
     hash_password, verify_password,
     create_access_token, create_refresh_token, decode_token,
@@ -19,13 +20,6 @@ from app.services.wallet_service import generate_wallet
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-async def get_user_with_relations(user_id: int, db: AsyncSession) -> User:
-    result = await db.execute(
-        select(User)
-        .options(joinedload(User.wallets), joinedload(User.profile))
-        .where(User.id == user_id)
-    )
-    return result.unique().scalar_one_or_none()
 
 
 @router.post("/register", response_model=UserOut, status_code=201)
