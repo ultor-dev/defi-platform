@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
-
 from app.core.database import get_db
 from app.core.security import get_current_user, require_admin
 from app.models.user import User, UserRole
@@ -26,13 +25,13 @@ def get_primary_wallet(user):
     return user.wallets[0]
 
 
-@router.post("/submit", response_model=UserOut)
+# ── Пользователь: подать заявку ───────────────────────────────
+@router.post("/submit")
 async def submit_kyc(
     body: KYCSubmitRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Проверяем есть ли уже pending/approved заявка
     existing = await db.execute(
         select(KYCApplication).where(
             KYCApplication.user_id == current_user.id,
@@ -52,16 +51,72 @@ async def submit_kyc(
     )
     db.add(app)
     await db.commit()
-    return current_user
+    await db.refresh(app)
+    return {"id": app.id, "status": app.status.value, "submitted_at": app.submitted_at}
 
 
+# ── Пользователь: статус последней заявки ────────────────────
+@router.get("/status")
+async def kyc_status(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(KYCApplication)
+        .where(KYCApplication.user_id == current_user.id)
+        .order_by(KYCApplication.submitted_at.desc())
+        .limit(1)
+    )
+    app = result.scalar_one_or_none()
+    if not app:
+        raise HTTPException(404, "No KYC application found")
+
+    return {
+        "id": app.id,
+        "status": app.status.value,
+        "full_name": app.full_name,
+        "document_type": app.document_type,
+        "document_number": app.document_number,
+        "rejection_reason": app.rejection_reason,
+        "submitted_at": app.submitted_at,
+        "reviewed_at": app.reviewed_at,
+    }
+
+
+# ── Пользователь: история всех заявок ────────────────────────
+@router.get("/my-applications")
+async def my_kyc_applications(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(KYCApplication)
+        .where(KYCApplication.user_id == current_user.id)
+        .order_by(KYCApplication.submitted_at.desc())
+    )
+    apps = result.scalars().all()
+    return [
+        {
+            "id": a.id,
+            "status": a.status.value,
+            "full_name": a.full_name,
+            "document_type": a.document_type,
+            "document_number": a.document_number,
+            "rejection_reason": a.rejection_reason,
+            "submitted_at": a.submitted_at,
+            "reviewed_at": a.reviewed_at,
+        }
+        for a in apps
+    ]
+
+
+# ── Старый эндпоинт review (оставляем для совместимости) ─────
 @router.post("/review", response_model=UserOut)
 async def review_kyc(
     body: KYCReviewRequest,
     reviewer: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    # Находим pending заявку
     kyc_result = await db.execute(
         select(KYCApplication).where(
             KYCApplication.user_id == body.user_id,
@@ -72,7 +127,6 @@ async def review_kyc(
     if not kyc_app:
         raise HTTPException(400, "No pending KYC for this user")
 
-    # Загружаем пользователя с кошельками
     user_result = await db.execute(
         select(User).options(joinedload(User.wallets)).where(User.id == body.user_id)
     )
@@ -89,7 +143,7 @@ async def review_kyc(
                 tx_hash = await mint_tokens(wallet.address, KYC_REWARD_TOKENS, HARDHAT_DEPLOYER_KEY)
                 print(f"Minted {KYC_REWARD_TOKENS} to {wallet.address}, tx: {tx_hash}")
             except Exception as e:
-                print(f"Mint failed: {e}")
+                print(f"Mint failed (non-critical): {e}")
     else:
         kyc_app.status = KYCStatus.REJECTED
         kyc_app.rejection_reason = body.rejection_reason
@@ -100,12 +154,12 @@ async def review_kyc(
     return user
 
 
+# ── Admin: список pending заявок ──────────────────────────────
 @router.get("/pending", response_model=list[UserOut])
 async def pending_kyc(
     moderator: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    # Находим пользователей с pending KYC
     result = await db.execute(
         select(User)
         .options(joinedload(User.wallets))
