@@ -11,39 +11,35 @@ import subprocess
 PROJECT_DIR = "/home/ultor/projects/defi-platform"
 
 # ── Цвета ─────────────────────────────────────────────────────
-R = "\033[0m"; B = "\033[1m"; CYAN = "\033[96m"; GREEN = "\033[92m"
-YELLOW = "\033[93m"; RED = "\033[91m"; GRAY = "\033[90m"; BLUE = "\033[94m"
+R = "\033[0m"
+B = "\033[1m"
+CYAN = "\033[96m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+RED = "\033[91m"
+GRAY = "\033[90m"
+BLUE = "\033[94m"
 MAGENTA = "\033[95m"
-
 
 def _ansi_len(s: str) -> int:
     """Визуальная длина строк без ANSI-кодов."""
     return len(re.sub(r'\033\[[0-9;]*m', '', s))
-
 
 def _pad(s: str, width: int) -> str:
     """Паддинг с учётом ANSI-кодов."""
     vis = _ansi_len(s)
     return s + ' ' * max(0, width - vis)
 
-
 def _shell_quote(s: str) -> str:
     """Безопасное экранирование для inline SQL (одинарные кавычки)."""
     return s.replace("'", "''")
-
 
 # ── Выполнить SELECT запрос ───────────────────────────────────
 def psql(query: str, params: tuple = None) -> list:
     """
     Выполняет SQL-запрос через docker compose exec ... psql.
     Для SELECT-запросов возвращает list of list of str.
-    Для DML используйте psql_exec().
-
-    ВАЖНО: этот метод всё ещё подставляет строки в SQL-текст,
-    но через _shell_quote() для базовой защиты.
-    Для максимальной безопасности используйте psycopg2.
     """
-    # Формируем SQL с экранированными параметрами
     if params:
         escaped = tuple(_shell_quote(str(p)) for p in params)
         query = query % escaped
@@ -64,7 +60,6 @@ def psql(query: str, params: tuple = None) -> list:
 
     lines = [l for l in stdout.split("\n") if l]
     return [l.split("\t") for l in lines]
-
 
 # ── Выполнить DML запрос ─────────────────────────────────────
 def psql_exec(query: str, silent: bool = False, params: tuple = None) -> bool:
@@ -88,14 +83,12 @@ def psql_exec(query: str, silent: bool = False, params: tuple = None) -> bool:
 
     if not silent:
         out = r.stdout.strip()
-        # Проверяем наличие DML-ключевых слов
         out_upper = out.upper()
         if any(x in out_upper for x in ("UPDATE", "DELETE", "INSERT")):
             print(f"{GREEN}✅ Done{R}")
         else:
             print(f"{GRAY}{out}{R}")
     return True
-
 
 def bcrypt_hash(password: str) -> str:
     """Генерирует bcrypt-хеш пароля через бэкенд-контейнер."""
@@ -113,7 +106,6 @@ def bcrypt_hash(password: str) -> str:
         print(f"{RED}Bcrypt error: {r.stderr.strip()}{R}")
         return ""
     return r.stdout.strip()
-
 
 def eth_wallet() -> tuple:
     """Генерирует новый ETH-кошелёк через бэкенд-сервис."""
@@ -136,31 +128,27 @@ def eth_wallet() -> tuple:
         print(f"{RED}Wallet parse error: {e}{R}")
         return ("", "")
 
-
 # ── Форматтеры ролей / KYC ───────────────────────────────────
 def cr(role: str) -> str:
     return {
-        "ADMIN":      f"{YELLOW}{B}ADMIN{R}",
-        "USER":       f"{GREEN}USER{R}",
+        "ADMIN": f"{YELLOW}{B}ADMIN{R}",
+        "USER": f"{GREEN}USER{R}",
         "UNVERIFIED": f"{GRAY}UNVERIFIED{R}",
     }.get(role, role)
-
 
 def ck(kyc: str) -> str:
     return {
         "APPROVED": f"{GREEN}APPROVED{R}",
-        "PENDING":  f"{YELLOW}PENDING{R}",
+        "PENDING": f"{YELLOW}PENDING{R}",
         "REJECTED": f"{RED}REJECTED{R}",
-        None:      GRAY + "—" + R,
-        "":        GRAY + "—" + R,
+        None: GRAY + "—" + R,
+        "": GRAY + "—" + R,
     }.get(kyc or "", f"{GRAY}—{R}")
-
 
 def hdr(text: str):
     print(f"\n{CYAN}{B}{'═' * 55}{R}")
     print(f"{CYAN}{B}  {text}{R}")
     print(f"{CYAN}{B}{'═' * 55}{R}")
-
 
 def menu(opts: dict):
     print()
@@ -168,21 +156,15 @@ def menu(opts: dict):
         print(f"  {BLUE}{B}[{k}]{R} {v}")
     print()
 
-
 def inp(prompt: str, default: str = "") -> str:
     val = input(f"  {B}{prompt}{R} ").strip()
     return val if val else default
 
-
 def confirm(msg: str) -> bool:
     return inp(f"{RED}{msg} (yes/no):{R}").lower() in ("yes", "y")
 
-
 # ── Список пользователей ──────────────────────────────────────
 def list_users(where: str = "1=1"):
-    """
-    Выводит список пользователей с основным кошельком и KYC-статусом.
-    """
     rows = psql(f"""
         SELECT
             u.id,
@@ -222,69 +204,93 @@ def list_users(where: str = "1=1"):
     for r in rows:
         if len(r) < 11:
             continue
-        (uid, u_uid, uname, email, role, kyc,
-         active, verified, addr, w_cnt, created) = r
-
+        uid, u_uid, uname, email, role, kyc, active, verified, addr, w_cnt, created = r
         addr_s = (addr[:6] + "…" + addr[-4:]) if addr and addr not in ("", "None") else "—"
         av = f"{GREEN}✓{R}" if active == "t" else f"{RED}✗{R}"
         vv = f"{GREEN}✓{R}" if verified == "t" else f"{YELLOW}?{R}"
 
         line = (
-            f"  {_pad(uid, 4)} {_pad(u_uid or '—', 12)} {_pad(uname, 14)} "
+            f"  {_pad(str(uid), 4)} {_pad(u_uid or '—', 12)} {_pad(uname, 14)} "
             f"{_pad(email, 26)} {_pad(cr(role), 22)} {_pad(ck(kyc), 20)} "
-            f"{_pad(vv, 3)} {_pad(av, 3)} {_pad(addr_s, 16)} {_pad(w_cnt, 3)} {created}"
+            f"{_pad(vv, 3)} {_pad(av, 3)} {_pad(addr_s, 16)} {_pad(str(w_cnt), 3)} {created}"
         )
         print(line)
 
     print(f"\n  {GRAY}Total: {len(rows)}{R}")
     return rows
 
-
 # ── Детали пользователя ───────────────────────────────────────
 def detail(uid: int):
-    rows = psql(f"""
+    # --- Получаем данные пользователя ---
+    user_rows = psql(f"""
         SELECT
             u.id, u.uid, u.username, u.email, u.role,
-            u.is_active, u.email_verified, u.created_at,
-            p.full_name, p.country, p.phone, p.telegram, p.birth_date
+            u.is_active, u.email_verified, u.created_at
         FROM users u
-        LEFT JOIN profiles p ON p.user_id = u.id
         WHERE u.id = {uid}
     """)
-    if not rows:
-        print(f"{RED}  Not found.{R}")
+    if not user_rows or not user_rows[0]:
+        print(f"{RED}  User #{uid} not found.{R}")
         return
 
-    r = rows[0]
-    hdr(f"User #{r[0]} — {r[2]}")
-    fields = [
-        ("ID",              r[0]),
-        ("UID",             r[1] or "—"),
-        ("Username",        r[2]),
-        ("Email",           r[3]),
-        ("Role",            cr(r[4])),
-        ("Active",          "Yes" if r[5] == "t" else f"{RED}No{R}"),
-        ("Email Verified",  "Yes" if r[6] == "t" else f"{YELLOW}No{R}"),
-        ("Created",         r[7]),
-        ("── Profile ──",   ""),
-        ("Full Name",       r[8] or "—"),
-        ("Country",         r[9] or "—"),
-        ("Phone",           r[10] or "—"),
-        ("Telegram",        r[11] or "—"),
-        ("Birth Date",      r[12] or "—"),
-    ]
-    for label, val in fields:
-        if label.startswith("──"):
-            print(f"\n  {GRAY}{label}{R}")
-        else:
-            print(f"  {GRAY}{label:<18}{R} {val}")
+    user = user_rows[0]
 
-    # Кошельки
+    # --- Получаем данные профиля (если есть) ---
+    profile_rows = psql(f"""
+        SELECT full_name, country, phone, telegram, birth_date
+        FROM profiles
+        WHERE user_id = {uid}
+    """)
+    profile = profile_rows[0] if profile_rows and profile_rows[0] else [None, None, None, None, None]
+
+    # --- Получаем кошельки ---
     wallets = psql(f"""
         SELECT id, address, label, is_primary
-        FROM wallets WHERE user_id = {uid}
+        FROM wallets
+        WHERE user_id = {uid}
         ORDER BY is_primary DESC, id
     """)
+
+    # --- Получаем последнюю KYC-заявку ---
+    kyc_rows = psql(f"""
+        SELECT id, status, full_name, document_type, document_number,
+               rejection_reason, submitted_at, reviewed_at
+        FROM kyc_applications
+        WHERE user_id = {uid}
+        ORDER BY submitted_at DESC LIMIT 1
+    """)
+    kyc = kyc_rows[0] if kyc_rows and kyc_rows[0] else [None, None, None, None, None, None, None, None]
+
+    # --- Выводим информацию ---
+    hdr(f"User #{user[0]} — {user[2]}")
+
+    # Основная информация о пользователе
+    fields = [
+        ("ID", user[0]),
+        ("UID", user[1] or "—"),
+        ("Username", user[2] or "—"),
+        ("Email", user[3] or "—"),
+        ("Role", cr(user[4])),
+        ("Active", "Yes" if user[5] == "t" else f"{RED}No{R}"),
+        ("Email Verified", "Yes" if user[6] == "t" else f"{YELLOW}No{R}"),
+        ("Created", user[7] or "—"),
+    ]
+    for label, val in fields:
+        print(f"  {GRAY}{label:<18}{R} {val}")
+
+    # Профиль
+    print(f"\n  {GRAY}── Profile ──{R}")
+    profile_fields = [
+        ("Full Name", profile[0] or "—"),
+        ("Country", profile[1] or "—"),
+        ("Phone", profile[2] or "—"),
+        ("Telegram", profile[3] or "—"),
+        ("Birth Date", profile[4] or "—"),
+    ]
+    for label, val in profile_fields:
+        print(f"  {GRAY}  {label:<16}{R} {val}")
+
+    # Кошельки
     print(f"\n  {GRAY}── Wallets ({len(wallets)}) ──{R}")
     if wallets:
         for w in wallets:
@@ -296,32 +302,23 @@ def detail(uid: int):
     else:
         print(f"  {GRAY}  No wallets.{R}")
 
-    # Последняя KYC-заявка
-    kyc_rows = psql(f"""
-        SELECT id, status, full_name, document_type, document_number,
-               rejection_reason, submitted_at, reviewed_at
-        FROM kyc_applications
-        WHERE user_id = {uid}
-        ORDER BY submitted_at DESC LIMIT 1
-    """)
+    # KYC
     print(f"\n  {GRAY}── Last KYC Application ──{R}")
-    if kyc_rows:
-        k = kyc_rows[0]
-        kfields = [
-            ("KYC ID",      k[0]),
-            ("Status",      k[1] or "—"),
-            ("Full Name",   k[2] or "—"),
-            ("Doc Type",    k[3] or "—"),
-            ("Doc Number",  k[4] or "—"),
-            ("Rejection",   k[5] or "—"),
-            ("Submitted",   k[6] or "—"),
-            ("Reviewed",    k[7] or "—"),
+    if kyc[0]:
+        kyc_fields = [
+            ("KYC ID", kyc[0] or "—"),
+            ("Status", ck(kyc[1]) or "—"),
+            ("Full Name", kyc[2] or "—"),
+            ("Doc Type", kyc[3] or "—"),
+            ("Doc Number", kyc[4] or "—"),
+            ("Rejection", kyc[5] or "—"),
+            ("Submitted", kyc[6] or "—"),
+            ("Reviewed", kyc[7] or "—"),
         ]
-        for label, val in kfields:
+        for label, val in kyc_fields:
             print(f"  {GRAY}  {label:<16}{R} {val}")
     else:
         print(f"  {GRAY}  No KYC application.{R}")
-
 
 # ── Редактор ──────────────────────────────────────────────────
 def edit(uid: int) -> str | None:
@@ -329,21 +326,21 @@ def edit(uid: int) -> str | None:
     while True:
         detail(uid)
         menu({
-            "1":  "Change username",
-            "2":  "Change email",
-            "3":  "Change password",
-            "4":  f"Change role  → {YELLOW}ADMIN{R}/{GREEN}USER{R}/{GRAY}UNVERIFIED{R}",
-            "5":  "Approve KYC  → создать/обновить запись в kyc_applications + role=USER",
-            "6":  "Reject KYC   → обновить последнюю заявку",
-            "7":  "Reset KYC    → удалить все заявки",
-            "8":  "Toggle ban   → active/inactive",
-            "9":  "Verify email manually",
+            "1": "Change username",
+            "2": "Change email",
+            "3": "Change password",
+            "4": f"Change role  → {YELLOW}ADMIN{R}/{GREEN}USER{R}/{GRAY}UNVERIFIED{R}",
+            "5": "Approve KYC  → создать/обновить запись в kyc_applications + role=USER",
+            "6": "Reject KYC   → обновить последнюю заявку",
+            "7": "Reset KYC    → удалить все заявки",
+            "8": "Toggle ban   → active/inactive",
+            "9": "Verify email manually",
             "10": f"{MAGENTA}Add new wallet{R}",
             "11": f"{MAGENTA}Set primary wallet{R}",
             "12": f"{MAGENTA}Delete wallet by ID{R}",
             "13": "Edit profile (full_name, country, phone, telegram)",
             "14": f"{RED}Delete user{R}",
-            "0":  "Back",
+            "0": "Back",
         })
         ch = inp("Action:")
 
@@ -490,10 +487,10 @@ def edit(uid: int) -> str | None:
                 silent=True
             )
             print(f"  {GRAY}Enter new values (Enter = не менять):{R}")
-            fname   = inp("Full name:")
+            fname = inp("Full name:")
             country = inp("Country:")
-            phone   = inp("Phone:")
-            tg      = inp("Telegram:")
+            phone = inp("Phone:")
+            tg = inp("Telegram:")
             sets = []
             if fname:
                 sets.append("full_name = '%s'" % _shell_quote(fname))
@@ -510,16 +507,14 @@ def edit(uid: int) -> str | None:
 
         elif ch == "14":
             if confirm(f"DELETE user #{uid} permanently?"):
-                # Каскадное удаление зависимых записей в правильном порядке
                 deps = [
                     ("kyc_applications", "user_id"),
-                    ("notifications",    "user_id"),
-                    ("user_tokens",      "user_id"),
+                    ("notifications", "user_id"),
+                    ("user_tokens", "user_id"),
                     ("conversation_participants", "user_id"),
-                    ("wallets",          "user_id"),
-                    ("profiles",         "user_id"),
+                    ("wallets", "user_id"),
+                    ("profiles", "user_id"),
                 ]
-                # Сначала удалить messages (sender_id) и transactions, зависящие от wallets
                 psql_exec(
                     "DELETE FROM messages WHERE sender_id = %d" % uid, silent=True
                 )
@@ -543,14 +538,13 @@ def edit(uid: int) -> str | None:
 
         input(f"\n  {GRAY}Press Enter to continue...{R}")
 
-
 # ── Создать юзера ─────────────────────────────────────────────
 def create_user():
     hdr("Create New User")
     username = inp("Username:")
-    email    = inp("Email:")
+    email = inp("Email:")
     password = inp("Password:")
-    role     = inp("Role (UNVERIFIED/USER/ADMIN) [UNVERIFIED]:") or "UNVERIFIED"
+    role = inp("Role (UNVERIFIED/USER/ADMIN) [UNVERIFIED]:") or "UNVERIFIED"
 
     if not all([username, email, password]):
         print(f"{RED}  All fields required.{R}")
@@ -602,28 +596,27 @@ def create_user():
     print(f"\n  {GREEN}✅ User created!{R}")
     print(f"  {GRAY}ID: {uid} | Address: {addr}{R}")
 
-
 # ── Статистика ────────────────────────────────────────────────
 def stats():
     hdr("Platform Statistics")
     queries = [
-        ("Total users",       "SELECT COUNT(*) FROM users"),
-        ("Admins",            "SELECT COUNT(*) FROM users WHERE role = 'ADMIN'"),
-        ("Users (KYC ok)",    "SELECT COUNT(*) FROM users WHERE role = 'USER'"),
-        ("Unverified",        "SELECT COUNT(*) FROM users WHERE role = 'UNVERIFIED'"),
-        ("─── KYC ───",       None),
-        ("KYC Pending",       "SELECT COUNT(*) FROM kyc_applications WHERE status = 'PENDING'"),
-        ("KYC Approved",      "SELECT COUNT(*) FROM kyc_applications WHERE status = 'APPROVED'"),
-        ("KYC Rejected",      "SELECT COUNT(*) FROM kyc_applications WHERE status = 'REJECTED'"),
-        ("─── Wallets ───",   None),
-        ("Total wallets",     "SELECT COUNT(*) FROM wallets"),
-        ("Primary wallets",   "SELECT COUNT(*) FROM wallets WHERE is_primary = true"),
-        ("─── Activity ───",  None),
-        ("Total messages",    "SELECT COUNT(*) FROM messages"),
-        ("Conversations",     "SELECT COUNT(*) FROM conversations"),
-        ("Total transactions","SELECT COUNT(*) FROM transactions"),
-        ("Pending tokens",    "SELECT COUNT(*) FROM user_tokens WHERE used = false"),
-        ("Active bans",       "SELECT COUNT(*) FROM users WHERE is_active = false"),
+        ("Total users", "SELECT COUNT(*) FROM users"),
+        ("Admins", "SELECT COUNT(*) FROM users WHERE role = 'ADMIN'"),
+        ("Users (KYC ok)", "SELECT COUNT(*) FROM users WHERE role = 'USER'"),
+        ("Unverified", "SELECT COUNT(*) FROM users WHERE role = 'UNVERIFIED'"),
+        ("─── KYC ───", None),
+        ("KYC Pending", "SELECT COUNT(*) FROM kyc_applications WHERE status = 'PENDING'"),
+        ("KYC Approved", "SELECT COUNT(*) FROM kyc_applications WHERE status = 'APPROVED'"),
+        ("KYC Rejected", "SELECT COUNT(*) FROM kyc_applications WHERE status = 'REJECTED'"),
+        ("─── Wallets ───", None),
+        ("Total wallets", "SELECT COUNT(*) FROM wallets"),
+        ("Primary wallets", "SELECT COUNT(*) FROM wallets WHERE is_primary = true"),
+        ("─── Activity ───", None),
+        ("Total messages", "SELECT COUNT(*) FROM messages"),
+        ("Conversations", "SELECT COUNT(*) FROM conversations"),
+        ("Total transactions", "SELECT COUNT(*) FROM transactions"),
+        ("Pending tokens", "SELECT COUNT(*) FROM user_tokens WHERE used = false"),
+        ("Active bans", "SELECT COUNT(*) FROM users WHERE is_active = false"),
     ]
     for label, q in queries:
         if q is None:
@@ -632,7 +625,6 @@ def stats():
             rows = psql(q)
             val = rows[0][0] if rows else "—"
             print(f"  {GRAY}{label:<22}{R} {B}{val}{R}")
-
 
 # ── Поиск ─────────────────────────────────────────────────────
 def search(q: str):
@@ -646,7 +638,6 @@ def search(q: str):
             WHERE w.user_id = u.id AND w.address ILIKE '%%{safe}%%'
         )
     """)
-
 
 # ── MAIN ──────────────────────────────────────────────────────
 def main():
@@ -721,7 +712,6 @@ def main():
             print(f"{RED}  Invalid{R}")
 
         input(f"\n  {GRAY}Press Enter...{R}")
-
 
 if __name__ == "__main__":
     main()

@@ -1,220 +1,263 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api';
 
-export default function Navbar() {
-  const navigate  = useNavigate();
-  const location  = useLocation();
-  const isAuth    = !!localStorage.getItem('access_token');
-  const [role, setRole]     = useState('');
-  const [open, setOpen]     = useState(false); // мобильное меню
+export default function Dashboard() {
+  const [user, setUser]   = useState(null);
+  const [notifs, setNotifs] = useState([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (isAuth) {
-      api.get('/auth/me').then(r => setRole(r.data.role)).catch(() => {});
-    }
-  }, [isAuth]);
+    api.get('/auth/me').then(r => setUser(r.data)).catch(() => {});
+    api.get('/notifications').then(r => setNotifs(r.data)).catch(() => {});
+  }, []);
 
-  // Закрывать меню при навигации
-  useEffect(() => { setOpen(false); }, [location.pathname]);
+  // Основной кошелёк — первый primary или просто первый
+  const primaryWallet = user?.wallets?.find(w => w.is_primary) ?? user?.wallets?.[0] ?? null;
 
-  const logout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    navigate('/login');
+  const kycColor = {
+    APPROVED: '#10b981',
+    PENDING:  '#f59e0b',
+    REJECTED: '#ef4444',
   };
 
-  const isActive = (path) =>
-    location.pathname === path ? s.linkActive : s.link;
-
   return (
-    <nav style={s.nav}>
-      <div style={s.inner}>
+    <div className="page">
 
-        {/* Лого */}
-        <Link to="/" style={s.brand}>
-          <span style={s.brandIcon}>⬡</span> DeFi Platform
-        </Link>
+      {/* ── Шапка ── */}
+      <div style={s.header}>
+        <div>
+          <h1 style={s.welcome}>Welcome, {user?.username || '…'}!</h1>
+          <p style={s.sub}>
+            {user?.role === 'UNVERIFIED'
+              ? 'Complete KYC to unlock all features'
+              : `Role: ${user?.role}`}
+          </p>
+        </div>
+        {user?.role === 'UNVERIFIED' && (
+          <button style={s.kycBanner} onClick={() => navigate('/kyc')}>
+            ⚠ Complete KYC verification →
+          </button>
+        )}
+      </div>
 
-        {/* Desktop links */}
-        {isAuth && (
-          <div style={s.desktopLinks}>
-            <Link to="/"       style={isActive('/')}>Dashboard</Link>
-            <Link to="/kyc"    style={isActive('/kyc')}>KYC</Link>
-            <Link to="/chat"   style={isActive('/chat')}>Chat</Link>
-            <Link to="/graph"  style={isActive('/graph')}>Network</Link>
-            <Link to="/profile" style={isActive('/profile')}>Profile</Link>
-            {role === 'ADMIN' && (
-              <Link to="/admin" style={{ ...isActive('/admin'), color: '#fbbf24' }}>
-                👑 Admin
-              </Link>
+      {/* ── Основная сетка ── */}
+      <div style={s.grid}>
+
+        {/* Кошелёк */}
+        <div className="card" style={s.walletCard}>
+          <div style={s.cardHead}>
+            <span style={s.cardIcon}>💳</span>
+            <span style={s.cardTitle}>Wallet</span>
+          </div>
+          {primaryWallet ? (
+            <>
+              <div style={s.address}>
+                {primaryWallet.address}
+              </div>
+              {primaryWallet.label && (
+                <div style={s.walletLabel}>{primaryWallet.label}</div>
+              )}
+              {user?.wallets?.length > 1 && (
+                <div style={s.walletExtra}>
+                  +{user.wallets.length - 1} more wallet{user.wallets.length > 2 ? 's' : ''}
+                </div>
+              )}
+            </>
+          ) : (
+            <p style={s.empty}>No wallet found</p>
+          )}
+        </div>
+
+        {/* KYC статус */}
+        <div className="card" style={s.kycCard}>
+          <div style={s.cardHead}>
+            <span style={s.cardIcon}>🔐</span>
+            <span style={s.cardTitle}>KYC Status</span>
+          </div>
+          {user ? (
+            <KycStatus userId={user.id} kycColor={kycColor} navigate={navigate} />
+          ) : (
+            <p style={s.empty}>Loading…</p>
+          )}
+        </div>
+
+        {/* Уведомления */}
+        <div className="card" style={s.notifCard}>
+          <div style={s.cardHead}>
+            <span style={s.cardIcon}>🔔</span>
+            <span style={s.cardTitle}>Notifications</span>
+            {notifs.length > 0 && (
+              <span style={s.badge}>{notifs.length}</span>
             )}
           </div>
-        )}
-
-        {/* Auth / Logout — desktop */}
-        <div style={s.authZone}>
-          {isAuth ? (
-            <button onClick={logout} style={s.logoutBtn}>Logout</button>
+          {notifs.length === 0 ? (
+            <p style={s.empty}>No notifications yet</p>
           ) : (
-            <>
-              <Link to="/login"    style={s.link}>Login</Link>
-              <Link to="/register" style={s.registerBtn}>Register</Link>
-            </>
+            <div style={s.notifList}>
+              {notifs.slice(0, 5).map((n, i) => (
+                <div key={i} style={s.notifItem}>
+                  <span style={s.notifDot} />
+                  <span style={s.notifText}>{n.message || n.text || JSON.stringify(n)}</span>
+                </div>
+              ))}
+            </div>
           )}
-          {/* Бургер — только мобайл */}
-          <button style={s.burger} onClick={() => setOpen(o => !o)} aria-label="Menu">
-            {open ? '✕' : '☰'}
-          </button>
         </div>
 
       </div>
 
-      {/* Mobile drawer */}
-      {open && isAuth && (
-        <div style={s.drawer}>
-          {[
-            { to: '/',        label: 'Dashboard' },
-            { to: '/kyc',     label: 'KYC' },
-            { to: '/chat',    label: 'Chat' },
-            { to: '/graph',   label: 'Network' },
-            { to: '/profile', label: 'Profile' },
-            ...(role === 'ADMIN' ? [{ to: '/admin', label: '👑 Admin' }] : []),
-          ].map(item => (
-            <Link key={item.to} to={item.to} style={s.drawerLink}>
-              {item.label}
-            </Link>
-          ))}
-          <button onClick={logout} style={s.drawerLogout}>Logout</button>
-        </div>
+      {/* ── Быстрые ссылки ── */}
+      <div style={s.quickNav}>
+        {[
+          { to: '/profile', icon: '👤', label: 'Edit Profile' },
+          { to: '/kyc',     icon: '🔐', label: 'KYC Status' },
+          { to: '/chat',    icon: '💬', label: 'Chat' },
+          { to: '/graph',   icon: '🌐', label: 'Network' },
+        ].map(item => (
+          <button key={item.to} style={s.quickBtn} onClick={() => navigate(item.to)}>
+            <span style={s.quickIcon}>{item.icon}</span>
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+    </div>
+  );
+}
+
+// Отдельный компонент для KYC статуса
+function KycStatus({ userId, kycColor, navigate }) {
+  const [status, setStatus] = useState(null);
+
+  useEffect(() => {
+    api.get('/kyc/status').then(r => setStatus(r.data)).catch(() => setStatus(null));
+  }, [userId]);
+
+  if (!status) return <p style={{ color: '#64748b', margin: 0 }}>Not submitted</p>;
+
+  return (
+    <div>
+      <span style={{
+        display: 'inline-block',
+        padding: '4px 12px',
+        borderRadius: 20,
+        background: kycColor[status.status] || '#475569',
+        color: '#fff',
+        fontWeight: 600,
+        fontSize: 13,
+      }}>
+        {status.status}
+      </span>
+      {status.status === 'REJECTED' && status.rejection_reason && (
+        <p style={{ color: '#ef4444', fontSize: 13, marginTop: 8 }}>
+          {status.rejection_reason}
+        </p>
       )}
-    </nav>
+      {status.status !== 'APPROVED' && (
+        <button style={s.kycBtn} onClick={() => navigate('/kyc')}>
+          {status.status === 'REJECTED' ? 'Resubmit →' : 'View details →'}
+        </button>
+      )}
+    </div>
   );
 }
 
 const s = {
-  nav: {
-    background: '#0a1628',
-    borderBottom: '1px solid #1e293b',
-    position: 'sticky',
-    top: 0,
-    zIndex: 50,
-  },
-  inner: {
+  header: {
     display: 'flex',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0 24px',
-    height: 56,
-    maxWidth: 1600,
-    margin: '0 auto',
-    width: '100%',
+    alignItems: 'flex-start',
+    marginBottom: 32,
+    flexWrap: 'wrap',
+    gap: 16,
   },
+  welcome: { fontSize: 32, fontWeight: 700, marginBottom: 4 },
+  sub: { color: '#94a3b8', fontSize: 15 },
 
-  brand: {
-    color: '#38bdf8',
-    fontWeight: 700,
-    fontSize: 18,
-    textDecoration: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 0,
-  },
-  brandIcon: { fontSize: 20 },
-
-  desktopLinks: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 4,
-    flex: 1,
-    justifyContent: 'center',
-    // Скрываем на мобайле через медиа нельзя в inline styles,
-    // но скрываем через overflow — управляем бургером
-  },
-
-  link: {
-    color: '#94a3b8',
-    textDecoration: 'none',
+  kycBanner: {
+    padding: '10px 20px',
+    background: '#451a03',
+    border: '1px solid #92400e',
+    color: '#fcd34d',
+    borderRadius: 10,
+    fontWeight: 600,
     fontSize: 14,
-    padding: '6px 12px',
-    borderRadius: 8,
-    transition: 'color 0.15s',
-  },
-  linkActive: {
-    color: '#f1f5f9',
-    textDecoration: 'none',
-    fontSize: 14,
-    padding: '6px 12px',
-    borderRadius: 8,
-    background: '#1e293b',
+    cursor: 'pointer',
   },
 
-  authZone: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    flexShrink: 0,
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gap: 20,
+    marginBottom: 32,
   },
 
-  logoutBtn: {
+  cardHead: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 },
+  cardIcon: { fontSize: 20 },
+  cardTitle: { fontWeight: 600, fontSize: 16, color: '#f1f5f9' },
+  badge: {
+    marginLeft: 'auto',
     background: '#ef4444',
     color: '#fff',
-    border: 'none',
-    padding: '7px 16px',
-    borderRadius: 8,
-    cursor: 'pointer',
-    fontSize: 14,
-    fontWeight: 500,
-  },
-  registerBtn: {
-    background: '#38bdf8',
-    color: '#0f172a',
-    textDecoration: 'none',
-    padding: '7px 16px',
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: 600,
+    borderRadius: 20,
+    padding: '1px 8px',
+    fontSize: 12,
+    fontWeight: 700,
   },
 
-  burger: {
-    display: 'none',  // показываем через CSS media — в inline недоступно,
-    // но рендерим всегда и управляем через JS
+  walletCard: {},
+  kycCard:    {},
+  notifCard:  {},
+
+  address: {
+    fontFamily: 'monospace',
+    fontSize: 13,
+    color: '#94a3b8',
+    wordBreak: 'break-all',
+    background: '#0f172a',
+    padding: '8px 12px',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  walletLabel: { fontSize: 13, color: '#64748b' },
+  walletExtra: { fontSize: 12, color: '#475569', marginTop: 4 },
+  empty: { color: '#64748b', fontSize: 14 },
+
+  notifList: { display: 'flex', flexDirection: 'column', gap: 10 },
+  notifItem: { display: 'flex', alignItems: 'flex-start', gap: 10 },
+  notifDot:  { width: 8, height: 8, borderRadius: '50%', background: '#38bdf8', marginTop: 5, flexShrink: 0 },
+  notifText: { fontSize: 14, color: '#cbd5e1', lineHeight: 1.4 },
+
+  kycBtn: {
+    marginTop: 12,
+    padding: '6px 14px',
     background: 'transparent',
     border: '1px solid #334155',
-    color: '#94a3b8',
     borderRadius: 8,
-    padding: '5px 10px',
-    fontSize: 16,
+    color: '#94a3b8',
+    fontSize: 13,
     cursor: 'pointer',
-    // Хак: всегда показываем кнопку, но десктоп-ссылки тоже видны
-    // — для полноценного адаптива используй CSS классы
   },
 
-  drawer: {
-    background: '#0f172a',
-    borderTop: '1px solid #1e293b',
+  quickNav: {
     display: 'flex',
-    flexDirection: 'column',
-    padding: '12px 24px 20px',
-    gap: 4,
+    gap: 12,
+    flexWrap: 'wrap',
   },
-  drawerLink: {
+  quickBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '10px 20px',
+    background: '#1e293b',
+    border: '1px solid #334155',
+    borderRadius: 10,
     color: '#cbd5e1',
-    textDecoration: 'none',
-    fontSize: 15,
-    padding: '10px 0',
-    borderBottom: '1px solid #1e293b',
-  },
-  drawerLogout: {
-    marginTop: 12,
-    background: '#ef4444',
-    color: '#fff',
-    border: 'none',
-    padding: '10px',
-    borderRadius: 8,
+    fontSize: 14,
+    fontWeight: 500,
     cursor: 'pointer',
-    fontSize: 15,
-    fontWeight: 600,
+    transition: 'border-color 0.15s',
   },
+  quickIcon: { fontSize: 16 },
 };
