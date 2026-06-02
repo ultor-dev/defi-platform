@@ -34,6 +34,14 @@ const s = {
   td: { padding: '12px', color: '#cbd5e1', fontSize: 13, verticalAlign: 'middle',
     borderBottom: '1px solid #1e293b' },
   badge: { padding: '3px 8px', borderRadius: 12, fontSize: 11, color: '#fff', fontWeight: 600 },
+  mintBox: { background: '#1e293b', borderRadius: 10, padding: 20, marginBottom: 16,
+    border: '1px solid #334155', display: 'flex', alignItems: 'center', gap: 16 },
+  mintInput: { width: 100, background: '#0f172a', border: '1px solid #334155',
+    borderRadius: 6, color: '#f1f5f9', padding: '8px 12px', fontSize: 14 },
+  mintBtnActive: { padding: '10px 20px', background: '#1d4ed8', color: '#fff',
+    border: '1px solid #2563eb', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: 13 },
+  mintBtnDisabled: { padding: '10px 20px', background: '#0f172a', color: '#475569',
+    border: '1px solid #334155', borderRadius: 6, cursor: 'default', fontWeight: 600, fontSize: 13 },
 };
 
 const roleColor = r => ({ ADMIN: '#7c3aed', USER: '#166534', UNVERIFIED: '#374151' }[r] || '#374151');
@@ -45,6 +53,8 @@ export default function Admin() {
   const [pending, setPending] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [toast, setToast] = useState('');
+  const [mintAmount, setMintAmount] = useState(1000);
+  const [minting, setMinting] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -91,6 +101,18 @@ export default function Admin() {
     } catch (e) { showToast('❌ ' + (e.response?.data?.detail || 'Ошибка')); }
   };
 
+  const mintAll = async () => {
+    setMinting(true);
+    try {
+      const r = await api.post('/admin/mint-all?amount=' + mintAmount);
+      showToast('✅ Заминчено ' + r.data.minted + ' юзерам по ' + mintAmount + ' DPT');
+    } catch (e) {
+      showToast('❌ ' + (e.response?.data?.detail || 'Ошибка'));
+    } finally {
+      setMinting(false);
+    }
+  };
+
   return (
     <div style={s.wrap}>
       {toast && <div style={s.toast}>{toast}</div>}
@@ -127,13 +149,36 @@ export default function Admin() {
                 { label: 'Верифицированных', val: stats.verified_users, color: '#4ade80', icon: '✅' },
                 { label: 'Заблокированных', val: stats.banned_users, color: '#f87171', icon: '🔒' },
               ].map(({ label, val, color, icon }) => (
-                <div key={label} style={{ ...s.statCard, borderTop: `3px solid ${color}` }}>
+                <div key={label} style={{ ...s.statCard, borderTop: '3px solid ' + color }}>
                   <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
                   <div style={{ fontSize: 32, fontWeight: 800, color, marginBottom: 4 }}>{val}</div>
                   <div style={{ color: '#64748b', fontSize: 13 }}>{label}</div>
                 </div>
               ))}
             </div>
+
+            <div style={s.mintBox}>
+              <span style={{ fontSize: 24 }}>🪙</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#f1f5f9', fontWeight: 600, marginBottom: 4 }}>Минт всем пользователям</div>
+                <div style={{ color: '#64748b', fontSize: 13 }}>Отправить DPT на кошельки всех активных юзеров</div>
+              </div>
+              <input
+                type="number"
+                value={mintAmount}
+                onChange={e => setMintAmount(Number(e.target.value))}
+                style={s.mintInput}
+                min={1}
+              />
+              <span style={{ color: '#475569', fontSize: 13 }}>DPT</span>
+              <button
+                onClick={mintAll}
+                disabled={minting}
+                style={minting ? s.mintBtnDisabled : s.mintBtnActive}>
+                {minting ? '⏳ Минтим…' : '🚀 Минт'}
+              </button>
+            </div>
+
             {stats.pending_kyc > 0 && (
               <div style={s.alert} onClick={() => setTab('KYC очередь')}>
                 ⚠️ {stats.pending_kyc} заявок ждут проверки →
@@ -216,7 +261,7 @@ export default function Admin() {
                           style={{ padding: '4px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12,
                             background: u.is_active ? '#7f1d1d' : '#166534',
                             color: u.is_active ? '#f87171' : '#4ade80',
-                            border: `1px solid ${u.is_active ? '#dc2626' : '#16a34a'}` }}>
+                            border: '1px solid ' + (u.is_active ? '#dc2626' : '#16a34a') }}>
                           {u.is_active ? 'Забанить' : 'Разбанить'}
                         </button>
                       )}

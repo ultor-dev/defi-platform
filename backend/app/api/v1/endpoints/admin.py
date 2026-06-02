@@ -214,6 +214,43 @@ async def change_role(
     return {"id": user.id, "username": user.username, "role": user.role}
 
 
+@router.post("/mint-all")
+async def mint_all_users(
+    amount: float = Query(default=1000.0),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.blockchain_service import mint_tokens
+    from app.models.notification import Notification, NotificationType
+
+    result = await db.execute(
+        select(User).options(joinedload(User.wallets)).where(User.is_active == True)
+    )
+    users = result.unique().scalars().all()
+
+    success, failed = 0, 0
+    for user in users:
+        from app.utils.wallet import get_primary_wallet
+        wallet = get_primary_wallet(user)
+        if not wallet:
+            continue
+        try:
+            await mint_tokens(wallet.address, amount, settings.HARDHAT_DEPLOYER_KEY)
+            db.add(Notification(
+                user_id=user.id,
+                type=NotificationType.SYSTEM,
+                title="Tokens Received 🎁",
+                body=f"Admin minted {amount} DPT to your wallet.",
+            ))
+            success += 1
+        except Exception as e:
+            print(f"Mint failed for {user.username}: {e}")
+            failed += 1
+
+    await db.commit()
+    return {"minted": success, "failed": failed, "amount_per_user": amount}
+
+
 @router.get("/network/graph")
 async def get_network_graph(
     _: User = Depends(get_current_user),

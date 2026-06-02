@@ -193,15 +193,44 @@ async def transfer(
     try:
         private_key = decrypt_private_key(wallet.encrypted_private_key)
         tx_hash = await transfer_tokens(private_key, body.to_address, body.amount)
-        
+
+        # Найти кошелёк получателя (может не быть в системе)
+        to_wallet_result = await db.execute(
+            select(Wallet).where(Wallet.address == body.to_address)
+        )
+        to_wallet = to_wallet_result.scalar_one_or_none()
+
+        # Сохранить транзакцию в БД
+        from app.models.transaction import Transaction, TransactionType, TransactionStatus
+        tx = Transaction(
+            from_wallet_id=wallet.id,
+            to_wallet_id=to_wallet.id if to_wallet else None,
+            tx_hash=tx_hash,
+            amount=body.amount,
+            token_symbol="DPT",
+            status=TransactionStatus.SUCCESS,
+            tx_type=TransactionType.TRANSFER,
+        )
+        db.add(tx)
+
+        # Уведомление отправителю
         from app.models.notification import Notification, NotificationType
-                # отправителю
         db.add(Notification(
-             user_id=current_user.id,
-             type=NotificationType.TRANSFER_SENT,
-             title="Transfer Sent 💸",
-             body=f"You sent {body.amount} tokens to {body.to_address[:10]}…",
+            user_id=current_user.id,
+            type=NotificationType.TRANSFER_SENT,
+            title="Transfer Sent 💸",
+            body=f"You sent {body.amount} tokens to {body.to_address[:10]}…",
         ))
+
+        # Уведомление получателю (если он в системе)
+        if to_wallet:
+            db.add(Notification(
+                user_id=to_wallet.user_id,
+                type=NotificationType.TRANSFER_RECEIVED,
+                title="Transfer Received 💰",
+                body=f"You received {body.amount} DPT from {wallet.address[:10]}…",
+            ))
+
         await db.commit()
 
         return {
