@@ -150,6 +150,26 @@ async def websocket_endpoint(websocket: WebSocket, conversation_id: int, token: 
                 )
                 db.add(msg)
                 await db.commit()
+
+                # найти второго участника
+                async with AsyncSessionLocal() as db2:
+                    result2 = await db2.execute(
+                        select(ConversationParticipant.user_id).where(
+                            ConversationParticipant.conversation_id == conversation_id,
+                            ConversationParticipant.user_id != user.id,
+                        )
+                    )
+                    recipient_id = result2.scalar_one_or_none()
+                    if recipient_id:
+                        from app.models.notification import Notification, NotificationType
+                        db2.add(Notification(
+                            user_id=recipient_id,
+                            type=NotificationType.NEW_MESSAGE,
+                            title="New Message 💬",
+                            body=f"{user.username}: {data[:80]}",
+                        ))
+                        await db2.commit()
+
                 await db.refresh(msg)
 
             await manager.broadcast(conversation_id, {

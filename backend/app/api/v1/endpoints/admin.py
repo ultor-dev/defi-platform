@@ -11,6 +11,7 @@ from app.core.security import require_admin, get_current_user
 from app.models.user import User, UserRole, Wallet
 from app.models.kyc import KYCApplication, KYCStatus
 from app.models.transaction import Transaction
+from app.models.notification import Notification, NotificationType
 from app.schemas.user import UserOut
 from app.utils.wallet import get_primary_wallet
 
@@ -119,7 +120,8 @@ async def approve_kyc(
     kyc_app.status = KYCStatus.APPROVED
     kyc_app.reviewed_by = moderator.id
     kyc_app.reviewed_at = datetime.now(timezone.utc)
-    user.role = UserRole.USER
+    if user.role == UserRole.UNVERIFIED:
+        user.role = UserRole.USER
 
     wallet = get_primary_wallet(user)
     if wallet:
@@ -131,6 +133,14 @@ async def approve_kyc(
             )
         except Exception as e:
             print(f"Mint failed (non-critical): {e}")
+
+    from app.models.notification import Notification, NotificationType
+    db.add(Notification(
+        user_id=user.id,
+        type=NotificationType.KYC_APPROVED,
+        title="KYC Approved ✅",
+        body="Your identity has been verified. You can now use all platform features.",
+    ))
 
     await db.commit()
     return {"status": "approved", "kyc_id": kyc_id, "user_id": user.id}
@@ -156,6 +166,14 @@ async def reject_kyc(
     kyc_app.rejection_reason = reason
     kyc_app.reviewed_by = moderator.id
     kyc_app.reviewed_at = datetime.now(timezone.utc)
+
+    from app.models.notification import Notification, NotificationType
+    db.add(Notification(
+        user_id=kyc_app.user_id,
+        type=NotificationType.KYC_REJECTED,
+        title="KYC Rejected ❌",
+        body=f"Your KYC was rejected: {reason}",
+    ))
 
     await db.commit()
     return {"status": "rejected", "kyc_id": kyc_id}

@@ -193,6 +193,17 @@ async def transfer(
     try:
         private_key = decrypt_private_key(wallet.encrypted_private_key)
         tx_hash = await transfer_tokens(private_key, body.to_address, body.amount)
+        
+        from app.models.notification import Notification, NotificationType
+                # отправителю
+        db.add(Notification(
+             user_id=current_user.id,
+             type=NotificationType.TRANSFER_SENT,
+             title="Transfer Sent 💸",
+             body=f"You sent {body.amount} tokens to {body.to_address[:10]}…",
+        ))
+        await db.commit()
+
         return {
             "tx_hash": tx_hash,
             "status": "success",
