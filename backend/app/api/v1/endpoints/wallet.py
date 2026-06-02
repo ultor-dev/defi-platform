@@ -220,3 +220,37 @@ async def export_private_key(
         "private_key": private_key,
         "warning": "Store this key safely. Never share it with anyone.",
     }
+
+
+@router.get("/transactions")
+async def wallet_transactions(
+    wallet_id: Optional[int] = None,
+    limit: int = 20,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.transaction import Transaction
+    from sqlalchemy import or_
+
+    wallet_ids = [w.id for w in current_user.wallets]
+    if not wallet_ids:
+        return []
+
+    ids = [wallet_id] if wallet_id and wallet_id in wallet_ids else wallet_ids
+
+    result = await db.execute(
+        select(Transaction)
+        .where(or_(
+            Transaction.from_wallet_id.in_(ids),
+            Transaction.to_wallet_id.in_(ids),
+        ))
+        .order_by(Transaction.created_at.desc())
+        .limit(limit).offset(offset)
+    )
+    txs = result.scalars().all()
+    return [{"id": tx.id, "tx_hash": tx.tx_hash, "amount": float(tx.amount),
+             "token_symbol": tx.token_symbol, "status": tx.status.value,
+             "tx_type": tx.tx_type.value, "note": tx.note,
+             "from_wallet_id": tx.from_wallet_id, "to_wallet_id": tx.to_wallet_id,
+             "created_at": tx.created_at.isoformat()} for tx in txs]

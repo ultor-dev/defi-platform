@@ -1,263 +1,363 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import api from '../api';
 
-export default function Dashboard() {
-  const [user, setUser]   = useState(null);
-  const [notifs, setNotifs] = useState([]);
-  const navigate = useNavigate();
+const NAV_LINKS = [
+  { to: '/',        label: 'Dashboard', icon: '▦' },
+  { to: '/kyc',     label: 'KYC',       icon: '◈' },
+  { to: '/chat',    label: 'Chat',      icon: '◎' },
+  { to: '/graph',   label: 'Network',   icon: '⬡' },
+  { to: '/profile', label: 'Profile',   icon: '◉' },
+];
 
+export default function Navbar() {
+  const navigate      = useNavigate();
+  const location      = useLocation();
+  const [role, setRole]   = useState('');
+  const [open, setOpen]   = useState(false);
+  const [width, setWidth] = useState(window.innerWidth);
+  const drawerRef         = useRef(null);
+
+  const isAuth = !!localStorage.getItem('access_token');
+
+  // Отслеживаем ширину окна
   useEffect(() => {
-    api.get('/auth/me').then(r => setUser(r.data)).catch(() => {});
-    api.get('/notifications').then(r => setNotifs(r.data)).catch(() => {});
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Основной кошелёк — первый primary или просто первый
-  const primaryWallet = user?.wallets?.find(w => w.is_primary) ?? user?.wallets?.[0] ?? null;
+  // Закрываем меню при смене роута
+  useEffect(() => { setOpen(false); }, [location.pathname]);
 
-  const kycColor = {
-    APPROVED: '#10b981',
-    PENDING:  '#f59e0b',
-    REJECTED: '#ef4444',
+  // Закрываем меню по клику вне
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (drawerRef.current && !drawerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (isAuth) {
+      api.get('/auth/me').then(r => setRole(r.data.role)).catch(() => {});
+    }
+  }, [isAuth]);
+
+  const logout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    navigate('/login');
   };
 
+  const isMobile  = width < 768;
+  const isActive  = (path) => location.pathname === path;
+
+  const allLinks = [
+    ...NAV_LINKS,
+    ...(role === 'ADMIN' ? [{ to: '/admin', label: 'Admin', icon: '♛', admin: true }] : []),
+  ];
+
   return (
-    <div className="page">
+    <>
+      <style>{css}</style>
+      <nav className="lf-nav">
+        <div className="lf-inner">
 
-      {/* ── Шапка ── */}
-      <div style={s.header}>
-        <div>
-          <h1 style={s.welcome}>Welcome, {user?.username || '…'}!</h1>
-          <p style={s.sub}>
-            {user?.role === 'UNVERIFIED'
-              ? 'Complete KYC to unlock all features'
-              : `Role: ${user?.role}`}
-          </p>
-        </div>
-        {user?.role === 'UNVERIFIED' && (
-          <button style={s.kycBanner} onClick={() => navigate('/kyc')}>
-            ⚠ Complete KYC verification →
-          </button>
-        )}
-      </div>
+          {/* Лого */}
+          <Link to="/" className="lf-brand">
+            <span className="lf-brand-hex">⬡</span>
+            <span className="lf-brand-text">Liberty<em>Finance</em></span>
+          </Link>
 
-      {/* ── Основная сетка ── */}
-      <div style={s.grid}>
-
-        {/* Кошелёк */}
-        <div className="card" style={s.walletCard}>
-          <div style={s.cardHead}>
-            <span style={s.cardIcon}>💳</span>
-            <span style={s.cardTitle}>Wallet</span>
-          </div>
-          {primaryWallet ? (
-            <>
-              <div style={s.address}>
-                {primaryWallet.address}
-              </div>
-              {primaryWallet.label && (
-                <div style={s.walletLabel}>{primaryWallet.label}</div>
-              )}
-              {user?.wallets?.length > 1 && (
-                <div style={s.walletExtra}>
-                  +{user.wallets.length - 1} more wallet{user.wallets.length > 2 ? 's' : ''}
-                </div>
-              )}
-            </>
-          ) : (
-            <p style={s.empty}>No wallet found</p>
-          )}
-        </div>
-
-        {/* KYC статус */}
-        <div className="card" style={s.kycCard}>
-          <div style={s.cardHead}>
-            <span style={s.cardIcon}>🔐</span>
-            <span style={s.cardTitle}>KYC Status</span>
-          </div>
-          {user ? (
-            <KycStatus userId={user.id} kycColor={kycColor} navigate={navigate} />
-          ) : (
-            <p style={s.empty}>Loading…</p>
-          )}
-        </div>
-
-        {/* Уведомления */}
-        <div className="card" style={s.notifCard}>
-          <div style={s.cardHead}>
-            <span style={s.cardIcon}>🔔</span>
-            <span style={s.cardTitle}>Notifications</span>
-            {notifs.length > 0 && (
-              <span style={s.badge}>{notifs.length}</span>
-            )}
-          </div>
-          {notifs.length === 0 ? (
-            <p style={s.empty}>No notifications yet</p>
-          ) : (
-            <div style={s.notifList}>
-              {notifs.slice(0, 5).map((n, i) => (
-                <div key={i} style={s.notifItem}>
-                  <span style={s.notifDot} />
-                  <span style={s.notifText}>{n.message || n.text || JSON.stringify(n)}</span>
-                </div>
+          {/* Desktop links */}
+          {isAuth && !isMobile && (
+            <div className="lf-links">
+              {allLinks.map(link => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`lf-link${isActive(link.to) ? ' lf-link--active' : ''}${link.admin ? ' lf-link--admin' : ''}`}
+                >
+                  <span className="lf-link-icon">{link.icon}</span>
+                  {link.label}
+                  {isActive(link.to) && <span className="lf-link-dot" />}
+                </Link>
               ))}
             </div>
           )}
+
+          {/* Right zone */}
+          <div className="lf-right">
+            {isAuth ? (
+              <>
+                {!isMobile && (
+                  <button onClick={logout} className="lf-logout">
+                    Sign out
+                  </button>
+                )}
+                {isMobile && (
+                  <button
+                    className={`lf-burger${open ? ' lf-burger--open' : ''}`}
+                    onClick={() => setOpen(o => !o)}
+                    aria-label="Menu"
+                  >
+                    <span /><span /><span />
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="lf-auth-links">
+                <Link to="/login"    className="lf-link">Login</Link>
+                <Link to="/register" className="lf-register">Register</Link>
+              </div>
+            )}
+          </div>
+
         </div>
 
-      </div>
-
-      {/* ── Быстрые ссылки ── */}
-      <div style={s.quickNav}>
-        {[
-          { to: '/profile', icon: '👤', label: 'Edit Profile' },
-          { to: '/kyc',     icon: '🔐', label: 'KYC Status' },
-          { to: '/chat',    icon: '💬', label: 'Chat' },
-          { to: '/graph',   icon: '🌐', label: 'Network' },
-        ].map(item => (
-          <button key={item.to} style={s.quickBtn} onClick={() => navigate(item.to)}>
-            <span style={s.quickIcon}>{item.icon}</span>
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-    </div>
+        {/* Mobile drawer */}
+        {isMobile && open && isAuth && (
+          <div className="lf-drawer" ref={drawerRef}>
+            {allLinks.map(link => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`lf-drawer-link${isActive(link.to) ? ' lf-drawer-link--active' : ''}${link.admin ? ' lf-drawer-link--admin' : ''}`}
+              >
+                <span className="lf-drawer-icon">{link.icon}</span>
+                {link.label}
+              </Link>
+            ))}
+            <button onClick={logout} className="lf-drawer-logout">Sign out</button>
+          </div>
+        )}
+      </nav>
+    </>
   );
 }
 
-// Отдельный компонент для KYC статуса
-function KycStatus({ userId, kycColor, navigate }) {
-  const [status, setStatus] = useState(null);
+const css = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital@0;1&family=Syne:wght@600;700&display=swap');
 
-  useEffect(() => {
-    api.get('/kyc/status').then(r => setStatus(r.data)).catch(() => setStatus(null));
-  }, [userId]);
+  .lf-nav {
+    background: #070d1a;
+    border-bottom: 1px solid rgba(56, 189, 248, 0.12);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    font-family: 'Syne', sans-serif;
+  }
 
-  if (!status) return <p style={{ color: '#64748b', margin: 0 }}>Not submitted</p>;
+  .lf-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    height: 58px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
 
-  return (
-    <div>
-      <span style={{
-        display: 'inline-block',
-        padding: '4px 12px',
-        borderRadius: 20,
-        background: kycColor[status.status] || '#475569',
-        color: '#fff',
-        fontWeight: 600,
-        fontSize: 13,
-      }}>
-        {status.status}
-      </span>
-      {status.status === 'REJECTED' && status.rejection_reason && (
-        <p style={{ color: '#ef4444', fontSize: 13, marginTop: 8 }}>
-          {status.rejection_reason}
-        </p>
-      )}
-      {status.status !== 'APPROVED' && (
-        <button style={s.kycBtn} onClick={() => navigate('/kyc')}>
-          {status.status === 'REJECTED' ? 'Resubmit →' : 'View details →'}
-        </button>
-      )}
-    </div>
-  );
-}
+  /* Brand */
+  .lf-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+  .lf-brand-hex {
+    font-size: 22px;
+    color: #38bdf8;
+    line-height: 1;
+    filter: drop-shadow(0 0 6px rgba(56,189,248,0.5));
+    animation: lf-pulse 3s ease-in-out infinite;
+  }
+  @keyframes lf-pulse {
+    0%, 100% { filter: drop-shadow(0 0 6px rgba(56,189,248,0.5)); }
+    50%       { filter: drop-shadow(0 0 12px rgba(56,189,248,0.9)); }
+  }
+  .lf-brand-text {
+    font-size: 17px;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: -0.01em;
+  }
+  .lf-brand-text em {
+    font-style: normal;
+    color: #38bdf8;
+    margin-left: 1px;
+  }
 
-const s = {
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 32,
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  welcome: { fontSize: 32, fontWeight: 700, marginBottom: 4 },
-  sub: { color: '#94a3b8', fontSize: 15 },
+  /* Desktop nav links */
+  .lf-links {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    justify-content: center;
+  }
 
-  kycBanner: {
-    padding: '10px 20px',
-    background: '#451a03',
-    border: '1px solid #92400e',
-    color: '#fcd34d',
-    borderRadius: 10,
-    fontWeight: 600,
-    fontSize: 14,
-    cursor: 'pointer',
-  },
+  .lf-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 8px;
+    color: #64748b;
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: color 0.15s, background 0.15s;
+  }
+  .lf-link:hover {
+    color: #cbd5e1;
+    background: rgba(255,255,255,0.04);
+  }
+  .lf-link--active {
+    color: #f1f5f9;
+    background: rgba(56,189,248,0.08);
+  }
+  .lf-link--admin {
+    color: #fbbf24;
+  }
+  .lf-link--admin:hover {
+    color: #fde68a;
+    background: rgba(251,191,36,0.08);
+  }
+  .lf-link-icon {
+    font-size: 14px;
+    opacity: 0.7;
+  }
+  .lf-link-dot {
+    position: absolute;
+    bottom: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 2px;
+    background: #38bdf8;
+    border-radius: 2px;
+  }
 
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-    gap: 20,
-    marginBottom: 32,
-  },
+  /* Right zone */
+  .lf-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .lf-auth-links {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .lf-logout {
+    padding: 7px 18px;
+    background: transparent;
+    border: 1px solid rgba(239,68,68,0.4);
+    border-radius: 8px;
+    color: #f87171;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    letter-spacing: 0.01em;
+  }
+  .lf-logout:hover {
+    background: rgba(239,68,68,0.1);
+    border-color: rgba(239,68,68,0.7);
+  }
+  .lf-register {
+    padding: 7px 18px;
+    background: #38bdf8;
+    border-radius: 8px;
+    color: #070d1a;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    transition: opacity 0.15s;
+  }
+  .lf-register:hover { opacity: 0.88; }
 
-  cardHead: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 },
-  cardIcon: { fontSize: 20 },
-  cardTitle: { fontWeight: 600, fontSize: 16, color: '#f1f5f9' },
-  badge: {
-    marginLeft: 'auto',
-    background: '#ef4444',
-    color: '#fff',
-    borderRadius: 20,
-    padding: '1px 8px',
-    fontSize: 12,
-    fontWeight: 700,
-  },
+  /* Burger button */
+  .lf-burger {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 36px;
+    height: 36px;
+    padding: 8px;
+    background: transparent;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .lf-burger span {
+    display: block;
+    height: 1.5px;
+    background: #94a3b8;
+    border-radius: 2px;
+    transition: transform 0.2s, opacity 0.2s;
+    transform-origin: center;
+  }
+  .lf-burger--open span:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+  .lf-burger--open span:nth-child(2) { opacity: 0; }
+  .lf-burger--open span:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
 
-  walletCard: {},
-  kycCard:    {},
-  notifCard:  {},
-
-  address: {
-    fontFamily: 'monospace',
-    fontSize: 13,
-    color: '#94a3b8',
-    wordBreak: 'break-all',
-    background: '#0f172a',
-    padding: '8px 12px',
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  walletLabel: { fontSize: 13, color: '#64748b' },
-  walletExtra: { fontSize: 12, color: '#475569', marginTop: 4 },
-  empty: { color: '#64748b', fontSize: 14 },
-
-  notifList: { display: 'flex', flexDirection: 'column', gap: 10 },
-  notifItem: { display: 'flex', alignItems: 'flex-start', gap: 10 },
-  notifDot:  { width: 8, height: 8, borderRadius: '50%', background: '#38bdf8', marginTop: 5, flexShrink: 0 },
-  notifText: { fontSize: 14, color: '#cbd5e1', lineHeight: 1.4 },
-
-  kycBtn: {
-    marginTop: 12,
-    padding: '6px 14px',
-    background: 'transparent',
-    border: '1px solid #334155',
-    borderRadius: 8,
-    color: '#94a3b8',
-    fontSize: 13,
-    cursor: 'pointer',
-  },
-
-  quickNav: {
-    display: 'flex',
-    gap: 12,
-    flexWrap: 'wrap',
-  },
-  quickBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '10px 20px',
-    background: '#1e293b',
-    border: '1px solid #334155',
-    borderRadius: 10,
-    color: '#cbd5e1',
-    fontSize: 14,
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'border-color 0.15s',
-  },
-  quickIcon: { fontSize: 16 },
-};
+  /* Mobile drawer */
+  .lf-drawer {
+    background: #0a1628;
+    border-top: 1px solid #1e293b;
+    padding: 16px 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    animation: lf-slide-down 0.2s ease;
+  }
+  @keyframes lf-slide-down {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .lf-drawer-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    border-radius: 10px;
+    color: #64748b;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 600;
+    transition: color 0.15s, background 0.15s;
+  }
+  .lf-drawer-link:hover { color: #cbd5e1; background: rgba(255,255,255,0.04); }
+  .lf-drawer-link--active { color: #f1f5f9; background: rgba(56,189,248,0.08); }
+  .lf-drawer-link--admin  { color: #fbbf24; }
+  .lf-drawer-icon { font-size: 16px; opacity: 0.8; width: 20px; text-align: center; }
+  .lf-drawer-logout {
+    margin-top: 16px;
+    padding: 13px;
+    background: transparent;
+    border: 1px solid rgba(239,68,68,0.35);
+    border-radius: 10px;
+    color: #f87171;
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .lf-drawer-logout:hover { background: rgba(239,68,68,0.08); }
+`;
