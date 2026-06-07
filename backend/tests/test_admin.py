@@ -7,8 +7,8 @@ async def test_stats_accessible_to_moderator(client: AsyncClient, moderator_head
     assert res.status_code == 200
     data = res.json()
     assert "total_users" in data
-    assert "kyc_pending" in data
-    assert "kyc_verified" in data
+    assert "pending_kyc" in data
+    assert "approved_kyc" in data
 
 
 async def test_stats_not_accessible_to_user(client: AsyncClient, auth_headers):
@@ -30,5 +30,5 @@ async def test_approve_nonexistent_user(client: AsyncClient, moderator_headers):
 async def test_approve_user_without_pending_kyc(client: AsyncClient, moderator_headers, registered_user):
     user_id = registered_user["id"]
     res = await client.post(f"/api/v1/admin/kyc/approve/{user_id}", headers=moderator_headers)
-    assert res.status_code == 400
-    assert "No pending KYC" in res.json()["detail"]
+    assert res.status_code == 404
+    assert "KYC application not found" in res.json()["detail"]

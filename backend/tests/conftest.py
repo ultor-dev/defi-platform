@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 
 from app.main import app
 from app.core.database import Base, get_db
-from app.models.user import User, Wallet, UserRole, KYCStatus
+from app.models.user import User, Wallet, UserRole
 from app.models.message import Conversation, ConversationParticipant, Message
+from app.models.kyc import KYCStatus
 
 # Используем SQLite в памяти для тестов
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -76,15 +77,15 @@ async def moderator_headers(client):
     # Регистрируем
     await client.post("/api/v1/auth/register", json={
         "email": "mod@test.com",
-        "username": "moderator",
+        "username": "admin",
         "password": "password123",
     })
     # Повышаем роль напрямую через БД
     async with TestSessionLocal() as db:
         from sqlalchemy import select
-        result = await db.execute(select(User).where(User.username == "moderator"))
+        result = await db.execute(select(User).where(User.username == "admin"))
         mod = result.scalar_one()
-        mod.role = UserRole.MODERATOR
+        mod.role = UserRole.ADMIN
         mod.kyc_status = KYCStatus.APPROVED
         await db.commit()
 

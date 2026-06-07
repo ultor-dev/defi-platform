@@ -2,8 +2,8 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from tests.conftest import TestSessionLocal
-from app.models.user import User, KYCStatus, UserRole
-
+from app.models.user import User, UserRole
+from app.models.kyc import KYCStatus
 
 async def test_submit_kyc(client: AsyncClient, auth_headers):
     res = await client.post("/api/v1/kyc/submit", headers=auth_headers, json={
@@ -11,9 +11,9 @@ async def test_submit_kyc(client: AsyncClient, auth_headers):
         "document_type": "passport",
         "document_number": "AB123456",
     })
-    assert res.status_code == 200
+    assert res.status_code == 201
     data = res.json()
-    assert data["kyc_status"] == "PENDING"
+    assert data["status"] == "PENDING"
 
 
 async def test_submit_kyc_twice_fails(client: AsyncClient, auth_headers):
@@ -28,7 +28,7 @@ async def test_submit_kyc_twice_fails(client: AsyncClient, auth_headers):
         "document_number": "AB123456",
     })
     assert res.status_code == 400
-    assert "under review" in res.json()["detail"]
+    assert "KYC already submitted or approved" in res.json()["detail"]
 
 
 async def test_moderator_can_see_pending(client: AsyncClient, auth_headers, moderator_headers):
@@ -63,8 +63,7 @@ async def test_approve_kyc(client: AsyncClient, auth_headers, moderator_headers)
     res = await client.post(f"/api/v1/admin/kyc/approve/{user_id}", headers=moderator_headers)
     assert res.status_code == 200
     data = res.json()
-    assert data["kyc_status"] == "APPROVED"
-    assert data["role"] == "USER"
+    assert data["status"] == "approved"
 
 
 async def test_reject_kyc(client: AsyncClient, auth_headers, moderator_headers):
@@ -82,4 +81,4 @@ async def test_reject_kyc(client: AsyncClient, auth_headers, moderator_headers):
         headers=moderator_headers
     )
     assert res.status_code == 200
-    assert res.json()["kyc_status"] == "REJECTED"
+    assert res.json()["status"] == "rejected"

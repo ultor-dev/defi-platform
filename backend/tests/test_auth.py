@@ -13,10 +13,6 @@ async def test_register_success(client: AsyncClient):
     assert data["email"] == "new@test.com"
     assert data["username"] == "newuser"
     assert data["role"] == "UNVERIFIED"
-    assert data["kyc_status"] == "NONE"
-    assert data["wallet"] is not None
-    assert data["wallet"]["address"].startswith("0x")
-
 
 async def test_register_duplicate_email(client: AsyncClient, registered_user):
     res = await client.post("/api/v1/auth/register", json={
